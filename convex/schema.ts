@@ -25,6 +25,7 @@ export default defineSchema({
     invitedBy: v.id("users"),
     invitedAt: v.number(),
     acceptedAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),
   }).index("by_email", ["email"])
     .index("invitedBy", ["invitedBy"])
     .index("status", ["status"])

@@ -62,19 +62,6 @@ export function SignInForm() {
 
   };
 
-  // const handleGoogleSignIn = async () => {
-  //   setError('');
-  //   setIsLoading(true);
-  //   try {
-  //     // await signInWithGoogle();
-  //     router.push('/');
-  //   } catch (err) {
-  //     setError(err instanceof Error ? err.message : 'Google sign in failed');
-  //   } finally {
-  //     setIsLoading(false);
-  //   }
-  // };
-
   const handleGoogleSignIn = async ()=>{
     try{
       sessionStorage.setItem("isOAuthFlow","true");
@@ -160,7 +147,7 @@ export function SignInForm() {
       </div>
 
       {/* Google Sign In */}
-      <Button
+      {/* <Button
         onClick={handleGoogleSignIn}
         disabled={isLoading}
         variant="outline"
@@ -168,7 +155,7 @@ export function SignInForm() {
       >
         <Chrome className="w-4 h-4" />
         Sign in with Google
-      </Button>
+      </Button> */}
 
       {/* Sign Up Link */}
       <p className="text-center text-muted-foreground text-sm">

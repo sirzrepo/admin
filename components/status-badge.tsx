@@ -22,6 +22,16 @@ export function StatusBadge({ status, variant = 'default' }: StatusBadgeProps) {
       text: 'text-yellow-400',
       dot: 'w-2 h-2 bg-yellow-500 rounded-full',
     },
+    accepted: {
+      bg: 'bg-green-500/20',
+      text: 'text-green-400',
+      dot: 'w-2 h-2 bg-green-500 rounded-full',
+    },
+    expired: {
+      bg: 'bg-red-500/20',
+      text: 'text-red-400',
+      dot: 'w-2 h-2 bg-red-500 rounded-full',
+    },
     completed: {
       bg: 'bg-green-500/20',
       text: 'text-green-400',

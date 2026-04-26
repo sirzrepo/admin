@@ -35,13 +35,15 @@ export const createInvite = mutation({
     }
 
     const token = generateInviteToken();
+    const now = Date.now();
     const inviteId = await ctx.db.insert("invites", {
       email: args.email,
       token,
       role: args.role || "user",
       status: "pending",
       invitedBy: adminId,
-      invitedAt: Date.now(),
+      invitedAt: now,
+      expiresAt: now + (3 * 24 * 60 * 60 * 1000), // 3 days from now
     });
 
     return inviteId;
@@ -99,15 +101,86 @@ export const acceptInvite = mutation({
   },
 });
 
+// Get invite by token
+export const getInviteByToken = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const invite = await ctx.db
+      .query("invites")
+      .withIndex("by_token_email", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!invite) {
+      return null;
+    }
+
+    // Check if invite is expired using expiresAt field
+    const now = Date.now();
+    if (invite.expiresAt && now > invite.expiresAt || invite.status === "expired") {
+      return { ...invite, valid: false, reason: "Invite has expired" };
+    }
+
+    // Check if invite has already been used
+    if (invite.status === "accepted") {
+      return { ...invite, valid: false, reason: "Invite has already been used" };
+    }
+
+    // Check if invite is pending
+    if (invite.status !== "pending") {
+      return { ...invite, valid: false, reason: "Invite is not valid" };
+    }
+
+    return { ...invite, valid: true, reason: "Invite is valid" };
+  },
+});
+
+// Check if an invite is valid for a given email
+export const validateInvite = query({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    // Find the invite by email
+    const invite = await ctx.db
+      .query("invites")
+      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .first();
+
+    if (!invite) {
+      return { valid: false, reason: "No invite found for this email" };
+    }
+
+    // Check if invite is expired using expiresAt field
+    const now = Date.now();
+    if (invite.expiresAt && now > invite.expiresAt || invite.status === "expired") {
+      return { valid: false, reason: "Invite has expired" };
+    }
+
+    // Check if invite has already been used
+    if (invite.status === "accepted") {
+      return { valid: false, reason: "Invite has already been used" };
+    }
+
+    // Check if invite is pending
+    if (invite.status !== "pending") {
+      return { valid: false, reason: "Invite is not valid" };
+    }
+
+    return { 
+      valid: true, 
+      role: invite.role,
+      reason: "Invite is valid" 
+    };
+  },
+});
+
 // Internal mutation to expire old invites (can be called by a scheduled function)
 export const expireOldInvites = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000; // 7 days ago
+    const now = Date.now();
 
     const oldInvites = await ctx.db
       .query("invites")
-      .filter((q) => q.lt(q.field("invitedAt"), cutoff))
+      .filter((q) => q.lt(q.field("expiresAt"), now))
       .filter((q) => q.eq(q.field("status"), "pending"))
       .collect();
 

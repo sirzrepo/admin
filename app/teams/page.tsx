@@ -21,19 +21,27 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { StatusBadge } from '@/components/status-badge';
-import { UserPlus, Mail, Trash2 } from 'lucide-react';
+import { UserPlus, Mail, Trash2, Copy, Check, Edit } from 'lucide-react';
 
 export default function TeamPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'user'>('user');
   const [inviteError, setInviteError] = useState('');
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
+  
+  // Role update state
+  const [roleUpdateOpen, setRoleUpdateOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [newRole, setNewRole] = useState<'admin' | 'user'>('user');
 
   const currentUser = useQuery(api.users.getMe);
-  // const teamMembers = useQuery(api.users.getTeamMembers) || [];
-  const teamMembers = currentUser ? [currentUser] : []; // Use only current user for now
-  const invites = useQuery(api.invites.getInvites) || [];
+  const teamMembers = useQuery(api.users.getAllUsers) || [];
+  const allInvites = useQuery(api.invites.getInvites) || [];
+  // Only show pending and expired invites in the invites section
+  const invites = allInvites.filter((invite: any) => invite.status !== 'accepted');
   const createInvite = useMutation(api.invites.createInvite);
+  const updateUserRole = useMutation(api.users.updateRole);
   // const removeMember = useMutation(api.users.removeTeamMember);
 
   const handleInvite = async () => {
@@ -45,9 +53,9 @@ export default function TeamPage() {
       return;
     }
 
-    // Check if email already exists in team or invites
+    // Check if email already exists in team or invites (including accepted invites)
     if (teamMembers.some((member: any) => member.email === inviteEmail) || 
-        invites.some((invite: any) => invite.email === inviteEmail)) {
+        allInvites.some((invite: any) => invite.email === inviteEmail)) {
       setInviteError('This email is already invited or is a team member');
       return;
     }
@@ -78,6 +86,24 @@ export default function TeamPage() {
     // }
   };
 
+  const handleRoleUpdate = (user: any) => {
+    setSelectedUser(user);
+    setNewRole(user.role || 'user');
+    setRoleUpdateOpen(true);
+  };
+
+  const handleUpdateRole = async () => {
+    if (!selectedUser) return;
+    
+    try {
+      await updateUserRole({ userId: selectedUser._id, role: newRole });
+      setRoleUpdateOpen(false);
+      setSelectedUser(null);
+    } catch (error) {
+      console.error('Failed to update user role:', error);
+    }
+  };
+
   const getRoleColor = (role: string) => {
     const roleColors: Record<string, string> = {
       admin: 'bg-red-500/20 text-red-300',
@@ -86,17 +112,23 @@ export default function TeamPage() {
     return roleColors[role] || 'bg-gray-500/20 text-gray-300';
   };
 
-  // Combine team members and pending invites for display
-  const allMembers = [
-    ...teamMembers.map((member: any) => ({ ...member, status: 'active' })),
-    ...invites.map((invite: any) => ({ 
-      ...invite, 
-      status: 'pending',
-      name: invite.email.split('@')[0],
-      lastActive: 'Never'
-    }))
-  ];
+  const generateInviteUrl = (token: string) => {
+    const baseUrl = window.location.origin;
+    return `${baseUrl}/auth/signup?token=${token}`;
+  };
 
+  const copyInviteLink = async (invite: any) => {
+    const inviteUrl = generateInviteUrl(invite.token);
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopiedInviteId(invite._id);
+      setTimeout(() => setCopiedInviteId(null), 2000); // Reset after 2 seconds
+    } catch (err) {
+      console.error('Failed to copy invite link:', err);
+    }
+  };
+
+  
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
@@ -187,7 +219,7 @@ export default function TeamPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-card border border-border rounded-lg p-4">
           <p className="text-muted-foreground text-sm font-medium">Total Members</p>
-          <p className="text-2xl font-bold text-foreground mt-2">{allMembers.length}</p>
+          <p className="text-2xl font-bold text-foreground mt-2">{teamMembers.length}</p>
         </div>
         <div className="bg-card border border-border rounded-lg p-4">
           <p className="text-muted-foreground text-sm font-medium">Active</p>
@@ -209,75 +241,213 @@ export default function TeamPage() {
         </div>
       </div>
 
-      {/* Team Table */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-b border-border bg-secondary/50">
-              <TableHead className="text-foreground font-semibold">Name</TableHead>
-              <TableHead className="text-foreground font-semibold">Email</TableHead>
-              <TableHead className="text-foreground font-semibold">Role</TableHead>
-              <TableHead className="text-foreground font-semibold">Created</TableHead>
-              <TableHead className="text-foreground font-semibold">Last Active</TableHead>
-              <TableHead className="text-foreground font-semibold">Status</TableHead>
-              <TableHead className="text-foreground font-semibold">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {allMembers.map((member: any) => (
-              <TableRow
-                key={member._id || member.id}
-                className="border-b border-border hover:bg-secondary/50 transition-colors"
-              >
-                <TableCell className="text-foreground font-medium">{member.name}</TableCell>
-                <TableCell className="text-muted-foreground text-sm">{member.email}</TableCell>
-                <TableCell>
-                  <span
-                    className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getRoleColor(
-                      member.role
-                    )}`}
-                  >
-                    {member.role ? (member.role.charAt(0).toUpperCase() + member.role.slice(1)) : 'User'}
-                  </span>
-                </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
-                  {new Date(member.createdAt || Date.now()).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
-                  {member.lastActive}
-                </TableCell>
-                <TableCell>
-                  <StatusBadge
-                    status={member.status === 'pending' ? 'pending' : 'active'}
-                  />
-                </TableCell>
-                <TableCell>
-                  {member.role !== 'admin' && member.status === 'active' && (
-                    <button
-                      onClick={() => handleRemoveMember(member._id || member.id)}
-                      className="text-destructive hover:text-red-400 p-2 hover:bg-destructive/10 rounded transition-colors"
-                      title="Remove member"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </TableCell>
+      {/* Team Members Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-foreground">Team Members</h2>
+        </div>
+        
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-b border-border bg-secondary/50">
+                <TableHead className="text-foreground font-semibold">Name</TableHead>
+                <TableHead className="text-foreground font-semibold">Email</TableHead>
+                <TableHead className="text-foreground font-semibold">Role</TableHead>
+                <TableHead className="text-foreground font-semibold">Created</TableHead>
+                <TableHead className="text-foreground font-semibold">Last Active</TableHead>
+                <TableHead className="text-foreground font-semibold">Status</TableHead>
+                <TableHead className="text-foreground font-semibold">Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {teamMembers.map((member: any) => (
+                <TableRow
+                  key={member._id || member.id}
+                  className="border-b border-border hover:bg-secondary/50 transition-colors"
+                >
+                  <TableCell className="text-foreground font-medium">{member.name}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">{member.email}</TableCell>
+                  <TableCell>
+                    <span
+                      className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getRoleColor(
+                        member.role
+                      )}`}
+                    >
+                      {member.role ? (member.role.charAt(0).toUpperCase() + member.role.slice(1)) : 'User'}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {new Date(member.createdAt || Date.now()).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {member.lastActive}
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={member.status || 'active'} />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2 items-center">
+                      {member._id !== currentUser?._id && (
+                        <button
+                          onClick={() => handleRoleUpdate(member)}
+                          className="text-primary hover:text-accent p-2 hover:bg-primary/10 rounded transition-colors"
+                          title="Update role"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      )}
+                      {member.role !== 'admin' && member._id !== currentUser?._id && (
+                        <button
+                          onClick={() => handleRemoveMember(member._id || member.id)}
+                          className="text-destructive hover:text-red-400 p-2 hover:bg-destructive/10 rounded transition-colors"
+                          title="Remove member"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Team Members Empty State */}
+        {teamMembers.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">No team members yet</p>
+          </div>
+        )}
       </div>
 
-      {/* Empty State */}
-      {allMembers.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">No team members yet</p>
+      {/* Pending Invites Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-foreground">Pending Invites</h2>
         </div>
-      )}
+        
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-b border-border bg-secondary/50">
+                <TableHead className="text-foreground font-semibold">Email</TableHead>
+                <TableHead className="text-foreground font-semibold">Role</TableHead>
+                <TableHead className="text-foreground font-semibold">Invited</TableHead>
+                <TableHead className="text-foreground font-semibold">Invite Link</TableHead>
+                <TableHead className="text-foreground font-semibold">Status</TableHead>
+                <TableHead className="text-foreground font-semibold">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {invites.map((invite: any) => (
+                <TableRow
+                  key={invite._id}
+                  className="border-b border-border hover:bg-secondary/50 transition-colors"
+                >
+                  <TableCell className="text-foreground font-medium">{invite.email}</TableCell>
+                  <TableCell>
+                    <span
+                      className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getRoleColor(
+                        invite.role
+                      )}`}
+                    >
+                      {invite.role.charAt(0).toUpperCase() + invite.role.slice(1)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {new Date(invite.invitedAt).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2 items-center">
+                      <span className="text-xs text-muted-foreground font-mono bg-secondary px-2 py-1 rounded border border-border">
+                        .../{invite.token.slice(-8)}
+                      </span>
+                      <button
+                        onClick={() => copyInviteLink(invite)}
+                        className="text-primary hover:text-accent p-1 hover:bg-primary/10 rounded transition-colors"
+                        title="Copy invite link"
+                      >
+                        {copiedInviteId === invite._id ? (
+                          <Check className="w-4 h-4" />
+                        ) : (
+                          <Copy className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={invite.status} />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2 items-center">
+                      {/* Future actions for invites can go here */}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Invites Empty State */}
+        {invites.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">No pending invites</p>
+          </div>
+        )}
+      </div>
+
+      {/* Role Update Dialog */}
+      <Dialog open={roleUpdateOpen} onOpenChange={setRoleUpdateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update User Role</DialogTitle>
+            <DialogDescription>
+              Change the role for {selectedUser?.name || selectedUser?.email}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Role
+              </label>
+              <select
+                value={newRole}
+                onChange={(e) => setNewRole(e.target.value as 'admin' | 'user')}
+                className="w-full px-4 py-2 bg-input text-foreground rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="admin">Admin</option>
+                <option value="user">User</option>
+              </select>
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRoleUpdateOpen(false);
+                  setSelectedUser(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateRole}>
+                Update Role
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

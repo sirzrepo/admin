@@ -22,7 +22,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Id } from '@/convex_/_generated/dataModel';
+import { Id } from '../../convex/_generated/dataModel';
 
 export default function BrandsPage() {
   const brandsData = useQuery(api.brands.getAllBrands);

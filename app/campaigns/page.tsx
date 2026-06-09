@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Id } from '@/convex_/_generated/dataModel';
+import { Id } from '../../convex/_generated/dataModel';
 
 export default function CampaignsPage() {
   const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
@@ -322,7 +322,7 @@ export default function CampaignsPage() {
                               <div>
                                 <p className="text-sm font-medium mb-2">Sample Hooks</p>
                                 <div className="space-y-1">
-                                  {template.sampleHooks.map((hook: string, idx: number) => (
+                                  {template?.sampleHooks && template?.sampleHooks.map((hook: string, idx: number) => (
                                     <p key={idx} className="text-sm text-muted-foreground italic">"{hook}"</p>
                                   ))}
                                 </div>

@@ -123,7 +123,7 @@ export default function SettingsPage() {
               <div>
                 <h2 className="text-xl font-semibold text-foreground mb-4">Role-Based Access Control</h2>
                 <div className="space-y-4">
-                  {['Admin', 'Manager', 'Analyst', 'Viewer'].map((role) => (
+                  {['Admin', 'Manager'].map((role) => (
                     <div
                       key={role}
                       className="p-4 bg-secondary rounded-lg border border-border flex items-center justify-between"

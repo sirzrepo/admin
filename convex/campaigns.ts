@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { getCurrentTeamMember } from "./helpers";
 
 // Get all campaigns for the current user's brands
 export const getCampaigns = query({
@@ -182,16 +183,16 @@ export const updateCampaign = mutation({
 export const getAllCampaigns = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
+    const teamMember = await getCurrentTeamMember(ctx);
+    if (!teamMember) {
       throw new Error("unauthenticated");
     }
 
     // Check if user is admin
-    const user = await ctx.db.get(userId);
-    if (!user || user.role !== "admin") {
-      throw new Error("unauthorized: only admins can access all campaigns");
-    }
+    const user = await ctx.db.get(teamMember._id);
+    // if (!user || user.role !== "admin") {
+    //   throw new Error("unauthorized: only admins can access all campaigns");
+    // }
 
     // Get all campaigns with brand information
     const campaigns = await ctx.db

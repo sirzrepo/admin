@@ -4,10 +4,10 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { ThemeProvider } from 'next-themes'
 import { Analytics } from '@vercel/analytics/next'
-import LayoutContent from './client-layout'
+import { ClerkProvider } from '@clerk/nextjs'
 import './globals.css'
 import { ConvexClientProvider } from '@/providers/ConvexClientProvider'
-import { AuthGuard } from '@/components/AuthGuard'
+import { LayoutContent } from './client-layout'
 
 const geist = Geist({ subsets: ["latin"], variable: '--font-geist-sans' });
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: '--font-geist-mono' });
@@ -42,19 +42,26 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${geist.variable} ${geistMono.variable} font-sans antialiased dark`} suppressHydrationWarning>
-        <ConvexClientProvider>
-              <AuthGuard>
-          <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
-            <LayoutContent>
+    <ClerkProvider
+      appearance={{
+        variables: {
+          colorPrimary: "#000000",
+          borderRadius: "8px",
+        },
+      }} 
+    >
+      <html lang="en" suppressHydrationWarning>
+        <body className={`${geist.variable} ${geistMono.variable} font-sans antialiased dark`} suppressHydrationWarning>
+          <ConvexClientProvider>
+            <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+              <LayoutContent>
                 {children}
-            </LayoutContent>
-            <Analytics />
-          </ThemeProvider>
-              </AuthGuard>
-        </ConvexClientProvider>
-      </body>
-    </html>
+              </LayoutContent>
+              <Analytics />
+            </ThemeProvider>
+          </ConvexClientProvider>
+        </body>
+      </html>
+    </ClerkProvider>
   )
 }

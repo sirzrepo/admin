@@ -21,6 +21,7 @@ import {
   ListIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 
 const navItems = [
   { icon: BarChart3, label: 'Overview', href: '/' },
@@ -46,7 +47,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 flex flex-col z-40',
+        'fixed left-0 top-0 h-screen bg-black border-r border-sidebar-border transition-all duration-300 flex flex-col z-40',
         collapsed ? 'w-20' : 'w-64'
       )}
     >
@@ -55,21 +56,26 @@ export function Sidebar() {
         <div className={cn('flex items-center gap-2', collapsed && 'justify-center w-full')}>
           {!collapsed && (
             <>
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <Zap className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <span className="font-bold text-sidebar-foreground text-lg">SIRz</span>
+              <Image 
+                src="/logo.png"
+                alt="SIRz"
+                width={52}
+                height={52}
+              />
             </>
           )}
           {collapsed && (
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Zap className="w-5 h-5 text-primary-foreground" />
-            </div>
+            <Image 
+              src="/logo.png"
+              alt="SIRz"
+              width={60}
+              height={60}
+            />
           )}
         </div>
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="p-1 hover:bg-sidebar-accent rounded-lg transition-colors"
+          className={` ${collapsed ? 'p-0' : 'p-1'} hover:bg-sidebar-accent rounded-lg transition-colors`}
         >
           {collapsed ? (
             <ChevronRight className="w-4 h-4 text-sidebar-foreground" />

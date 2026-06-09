@@ -19,17 +19,65 @@ export default defineSchema({
 
   invites: defineTable({
     email: v.string(),
-    role: v.union(v.literal("admin"), v.literal("user")),
-    status: v.union(v.literal("pending"), v.literal("accepted"), v.literal("expired")),
+    role: v.string(),
     token: v.string(),
-    invitedBy: v.id("users"),
-    invitedAt: v.number(),
-    acceptedAt: v.optional(v.number()),
-    expiresAt: v.optional(v.number()),
-  }).index("by_email", ["email"])
-    .index("invitedBy", ["invitedBy"])
-    .index("status", ["status"])
-    .index("by_token_email", ["token", "email"]),
+    status: v.union(
+        v.literal("pending"),
+        v.literal("accepted"),
+        v.literal("expired")
+    ),
+    invitedBy: v.id('teams'),
+    expiresAt: v.number(),
+})
+    .index('by_status', ['status'])
+    .index('by_email', ['email'])
+    .index('by_token', ['token']),
+
+  teams: defineTable({
+    name: v.optional(v.string()),
+    image: v.optional(v.string()),
+    email: v.optional(v.string()),
+    clerkId: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    bio: v.optional(v.string()),
+    location: v.optional(v.string()),
+
+    // Marketplace/merchant fields
+    referralCode: v.optional(v.string()),
+    verified: v.optional(v.boolean()),
+    isActive: v.optional(v.boolean()),
+  })
+    .index("email", ["email"])
+    .index("phone", ["phone"])
+    .index("verified", ["verified"])
+    .index("isActive", ["isActive"])
+    .index("by_clerkId", ["clerkId"]),
+
+  roles: defineTable({
+    name: v.string(),
+  })
+  .index('by_name', ['name']),
+
+  roleTeams: defineTable({
+    roleId: v.id("roles"),
+    teamId: v.id("teams"),
+  })
+  .index('by_role', ['roleId'])
+  .index('by_team', ['teamId'])
+  .index('by_role_team', ['roleId', 'teamId']),
+
+  permissions: defineTable({
+    name: v.string(),
+  })
+  .index('by_name', ['name']),
+
+  permissionRoles: defineTable({
+    permissionId: v.id('permissions'),
+    roleId: v.id('roles')
+  })
+    .index('by_role', ['roleId'])
+    .index('by_permission', ['permissionId'])
+    .index('by_permission_role', ['permissionId', 'roleId']),
 
   // Third-party Integrations (e.g. Shopify, TikTok)
   integrations: defineTable({

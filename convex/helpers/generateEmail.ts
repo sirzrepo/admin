@@ -26,10 +26,12 @@ export function generateEmail({
   const minutesValid = Math.floor((+expires - Date.now()) / (60 * 1000));
 
   // Construct verification link
-  const verifyUrl = `${appBaseUrl}/auth/verify-email?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+  // const verifyUrl = `${appBaseUrl}/auth/verify-email?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+  const verifyUrl = `https://admin-ancl.vercel.app?token=${encodeURIComponent(token)}`;
 
   // Construct invite accept link
-  const inviteUrl = `${appBaseUrl}?token=${encodeURIComponent(token)}`;
+  // const inviteUrl = `${appBaseUrl}?token=${encodeURIComponent(token)}`;
+  const inviteUrl = `https://admin-ancl.vercel.app?token=${encodeURIComponent(token)}`;
 
   return {
     from: fromEmail,
@@ -59,7 +61,7 @@ export function generateEmail({
             text-align:center;
           ">
             <img
-              src="https://admin.sirz.ai/logo.png"
+              src="https://admin-ancl.vercel.app/logo.png"
               alt="Sirz"
               width="180"
               style="margin-bottom:20px;"

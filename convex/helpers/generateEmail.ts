@@ -179,7 +179,7 @@ export function generateEmail({
                         box-shadow:0 8px 20px rgba(8,139,86,.25);
                       "
                     >
-                      Accept Invitation →
+                      Accept Invitation
                     </a>
 
                     <p style="

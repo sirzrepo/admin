@@ -1,6 +1,6 @@
 const brandName = process.env.APP_NAME ?? "Sirz";
 const fromEmail = "Sirz <no-reply@rekobo.store>";
-const appBaseUrl = process.env.SITE_URL
+// const appBaseUrl = process.env.SITE_URL
 
 export function generateEmail({
   type,

@@ -2,9 +2,7 @@ import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { filter } from "convex-helpers/server/filter";
 import { Resend as ResendAPI } from "resend";
-// import { generateEmail } from "../helpers/generateEmail";
 import { mutation, query } from "./_generated/server";
-import { generateEmail } from "./helpers/generateEmail";
 import { api } from "./_generated/api";
 
 // Create a new invite

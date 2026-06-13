@@ -7,9 +7,9 @@ export function generateEmail({
   email,
   subject,
   token,
+  cta,
   expires,
   message = "Click the button below to verify your email address and continue.",
-  cta = "Verify Email",
   disclaimer = "If you did not request this verification, please ignore this message — no further action is required.",
   businessName,
 }: {
@@ -17,9 +17,9 @@ export function generateEmail({
   email: string;
   subject: string;
   token: string;
+  cta?: string;
   expires: number;
   message?: string;
-  cta?: string;
   disclaimer?: string;
   businessName?: string;
 }) {
@@ -99,45 +99,7 @@ export function generateEmail({
             </p>
 
             ${
-              type === "passwordReset"
-                ? `
-                  <div style="
-                    margin:32px 0;
-                    background:#f8faf9;
-                    border:2px dashed #088b56;
-                    border-radius:18px;
-                    text-align:center;
-                    padding:28px;
-                  ">
-                    <p style="
-                      margin:0 0 10px;
-                      color:#666;
-                      font-size:13px;
-                      text-transform:uppercase;
-                      letter-spacing:2px;
-                    ">
-                      Verification Code
-                    </p>
-
-                    <div style="
-                      font-size:42px;
-                      font-weight:800;
-                      color:#088b56;
-                      letter-spacing:10px;
-                    ">
-                      ${token}
-                    </div>
-
-                    <p style="
-                      margin-top:16px;
-                      color:#666;
-                      font-size:13px;
-                    ">
-                      Expires in ${minutesValid} minutes
-                    </p>
-                  </div>
-                `
-                : type === "invite"
+              type === "invite"
                 ? `
                   <div style="
                     text-align:center;
@@ -191,7 +153,7 @@ export function generateEmail({
                     </p>
                   </div>
                 `
-                : `
+                  : `
                   <div style="
                     text-align:center;
                     margin:36px 0;

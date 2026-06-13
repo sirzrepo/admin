@@ -4,7 +4,7 @@ import { Resend } from "resend";
 import { action } from "../_generated/server";
 import { v } from "convex/values";
 import { generateEmail } from "../helpers/generateEmail";
-const fromEmail = "Rekobo <admin@rekobo.store>";
+// const fromEmail = "Rekobo <admin@rekobo.store>";
 
 export const sendInviteEmail = action({
   args: {

@@ -28,53 +28,77 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useRouter } from 'next/navigation';
-import { useAuthActions } from '@convex-dev/auth/react';
 import { useQuery } from 'convex/react';
 import { api } from '../convex/_generated/api';
+import { UserButton } from '@clerk/nextjs';
 
 export function Header() {
-  const router = useRouter();
-  const { signOut } = useAuthActions();
   const { theme, setTheme } = useTheme();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [impersonateOpen, setImpersonateOpen] = useState(false);
-  const [impersonateEmail, setImpersonateEmail] = useState('');
-   const user = useQuery(api.users.getMe);
 
-   console.log("user", user);
-
-  const mockUsers = [
-    'admin@sirz.com',
-    'brand@techflow.com',
-    'analyst@sirz.com',
-    'manager@sirz.com',
-  ];
-
-const handleLogout = async () => {
-  await signOut();
-  router.push("/auth/signin");
-};
 
   return (
-    <header className="fixed top-0 left-20 right-0 h-16 bg-card border-b border-border grid grid-cols-3 items-center px-6 z-30 md:left-0">
+    <header className="fixed top-0 left-20 right-0 h-16 bg-card border-b border-border flex items-center justify-between px-6 z-30 md:left-0">
       <div></div>
-
-      {/* Search */}
-      <div className="flex justify-center">
-        <div className="max-w-md w-full">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search campaigns, brands, ambassadors..."
-              className="w-full pl-10 pr-4 py-2 bg-input text-foreground rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-            />
-          </div>
-        </div>
-      </div>
 
       {/* Right Actions */}
       <div className="flex justify-end items-center gap-3">
+        <div className="relative">
+          {/* Search Container */}
+          <div 
+            className={`flex items-center justify-end transition-all duration-700 ease-out origin-right ${
+              searchOpen 
+                ? 'w-80 scale-x-100 opacity-100' 
+                : 'w-10 scale-x-0 opacity-0'
+            }`}
+            style={{
+              transform: searchOpen ? 'scaleX(1)' : 'scaleX(0)',
+              transformOrigin: 'right center'
+            }}
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSearchOpen(false)}
+              className={`w-8 h-8 mr-2 flex-shrink-0 transition-all duration-300 ${
+                searchOpen ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
+              }`}
+            >
+              <span className="text-lg opacity-70 hover:opacity-100 transition-opacity">×</span>
+            </Button>
+            <div className="relative flex-1 bg-input border border-border rounded-lg overflow-hidden">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
+              <input
+                type="text"
+                placeholder="Search..."
+                className="w-full pl-10 pr-4 py-2 bg-transparent text-foreground focus:outline-none text-sm"
+                autoFocus
+                onBlur={(e) => {
+                  setTimeout(() => setSearchOpen(false), 150);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setSearchOpen(false);
+                }}
+              />
+            </div>
+          </div>
+          
+          {/* Search Icon Button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSearchOpen(true)}
+            className={`absolute top-0 right-0 transition-all duration-300 ease-out ${
+              searchOpen 
+                ? 'scale-0 opacity-0 rotate-90' 
+                : 'scale-100 opacity-100 rotate-0'
+            }`}
+          >
+            <Search className="w-5 h-5" />
+          </Button>
+        </div>
+
+
         {/* Notifications */}
         <Button
           variant="ghost"
@@ -85,59 +109,22 @@ const handleLogout = async () => {
           <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
         </Button>
 
-        {/* Theme Toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        >
-          {theme === 'dark' ? (
-            <Sun className="w-5 h-5" />
-          ) : (
-            <Moon className="w-5 h-5" />
-          )}
-        </Button>
-
         {/* Settings */}
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+          {/* <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon">
               <Settings className="w-5 h-5" />
             </Button>
-          </DropdownMenuTrigger>
+          </DropdownMenuTrigger> */}
           <DropdownMenuContent align="end">
-            <div className="px-2 py-1.5 text-sm">
-              <div className="font-medium">{user?.name || 'User'}</div>
-              <div className="text-muted-foreground">{user?.email || ''}</div>
-            </div>
-            <DropdownMenuSeparator />
             <DropdownMenuItem>Profile Settings</DropdownMenuItem>
             <DropdownMenuItem>Preferences</DropdownMenuItem>
             <DropdownMenuItem>Help & Support</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout} className="text-destructive">
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
         {/* Profile Avatar */}
-        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm">
-          {user?.image ? (
-            <Image 
-              src={user.image} 
-              alt="User avatar"
-              className="rounded-full"
-              width={32} 
-              height={32} 
-            />
-          ) : (
-            <span className="text-primary-foreground font-semibold text-sm">
-              {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-            </span>
-          )}
-        </div>
+         <UserButton />
       </div>
     </header>
   );

@@ -5,20 +5,21 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 // Create a new ambassador
 export const createAmbassador = mutation({
   args: {
-    brandId: v.id("brands"),
+    brandId: v.optional(v.id("brands")),
     name: v.string(),
     category: v.string(),
     niche: v.string(),
     personality: v.string(),
     type: v.string(),
-    imageUrl: v.optional(v.string()),
-    sampleHook: v.optional(v.string()),
+    imageUrl: v.string(),
+    sampleHook: v.string(),
     isActive: v.boolean(),
     generationTaskId: v.optional(v.id("agentTasks")),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("unauthenticated");
+    if (!args.brandId) throw new Error("brandId is required");
 
     // Verify user owns the brand
     const brand = await ctx.db.get(args.brandId);
@@ -67,7 +68,7 @@ export const getAmbassador = query({
     if (!userId) return null;
 
     const ambassador = await ctx.db.get(args.ambassadorId);
-    if (!ambassador) return null;
+    if (!ambassador || !ambassador.brandId) return null;
 
     // Verify user owns the brand
     const brand = await ctx.db.get(ambassador.brandId);
@@ -99,8 +100,11 @@ export const updateAmbassador = mutation({
     const ambassador = await ctx.db.get(args.ambassadorId);
     if (!ambassador) throw new Error("ambassador not found");
 
+    const brandId = ambassador.brandId;
+    if (!brandId) throw new Error("ambassador missing brandId");
+
     // Verify user owns the brand
-    const brand = await ctx.db.get(ambassador.brandId);
+    const brand = await ctx.db.get(brandId);
     if (!brand || brand.userId !== userId) {
       throw new Error("unauthorized: you don't own this brand");
     }
@@ -125,8 +129,11 @@ export const deleteAmbassador = mutation({
     const ambassador = await ctx.db.get(args.ambassadorId);
     if (!ambassador) throw new Error("ambassador not found");
 
+    const brandId = ambassador.brandId;
+    if (!brandId) throw new Error("ambassador missing brandId");
+
     // Verify user owns the brand
-    const brand = await ctx.db.get(ambassador.brandId);
+    const brand = await ctx.db.get(brandId);
     if (!brand || brand.userId !== userId) {
       throw new Error("unauthorized: you don't own this brand");
     }
@@ -174,7 +181,7 @@ export const getAmbassadorsByTaskId = query({
 
     return await ctx.db
       .query("ambassadors")
-      .withIndex("by_generationTaskId", (q) => q.eq("generationTaskId", args.generationTaskId))
+      .filter((q) => q.eq(q.field("generationTaskId"), args.generationTaskId))
       .collect();
   },
 });

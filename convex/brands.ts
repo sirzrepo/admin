@@ -1,6 +1,7 @@
 import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { getCurrentTeamMember } from "./helpers";
 
 // Internal query used by webhooks to look up a brand by userId without auth context
 export const getBrandByUserId = internalQuery({
@@ -248,16 +249,17 @@ export const saveThreadId = mutation({
 export const getAllBrands = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
+    const teamMember = await getCurrentTeamMember(ctx);
+    if (!teamMember) {
       throw new Error("unauthenticated");
     }
 
+
     // Check if user is admin
-    const user = await ctx.db.get(userId);
-    if (!user || user.role !== "admin") {
-      throw new Error("unauthorized: only admins can access all brands");
-    }
+    const teamMemberInfo = await ctx.db.get(teamMember._id);
+    // if (!teamMemberInfo || teamMemberInfo.role !== "admin") {
+    //   throw new Error("unauthorized: only admins can access all brands");
+    // }
 
     // Get all brands regardless of user ownership and status
     const brands = await ctx.db

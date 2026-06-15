@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Search, Plus, Sparkles, LayoutTemplateIcon, Filter, Eye, Edit, Trash2, MoreVertical } from 'lucide-react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { Id } from '@/convex_/_generated/dataModel';
+import { Id } from '../../convex/_generated/dataModel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';

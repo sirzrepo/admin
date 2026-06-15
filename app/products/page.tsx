@@ -87,7 +87,7 @@ export default function ProductsPage() {
   });
 
   // Queries
-   const currentUser = useQuery(api.users.getMe);
+  //  const currentUser = useQuery(api.teams.authenticated);
   const brands = useQuery(api.brands.getBrand);
   const selectedBrand = brands; // getBrand returns a single brand object
   const products = useQuery(

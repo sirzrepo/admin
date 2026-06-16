@@ -58,6 +58,7 @@ export const getAmbassadors = query({
   },
 });
 
+
 // Get a single ambassador by ID
 export const getAmbassador = query({
   args: {
@@ -183,5 +184,21 @@ export const getAmbassadorsByTaskId = query({
       .query("ambassadors")
       .filter((q) => q.eq(q.field("generationTaskId"), args.generationTaskId))
       .collect();
+  },
+});
+
+
+// Get all ambassadors for admin viewing
+export const getAdminAmbassadors = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+
+    const ambassadors = await ctx.db
+      .query("ambassadors")
+      .collect();
+
+    return ambassadors.sort((a, b) => b.createdAt - a.createdAt);
   },
 });

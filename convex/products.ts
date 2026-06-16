@@ -19,6 +19,18 @@ export const listProducts = query({
   }
 });
 
+// Admin query to list all synced products across brands (paginated)
+export const listAllProducts = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("products")
+      .paginate(args.paginationOpts);
+  }
+});
+
 // Non-paginated collect query used by the Brand Agent tool (agents can't use paginationOpts)
 export const listProductsForAgent = query({
   args: { brandId: v.id("brands") },

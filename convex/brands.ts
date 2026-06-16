@@ -253,15 +253,6 @@ export const getAllBrands = query({
     if (!teamMember) {
       throw new Error("unauthenticated");
     }
-
-
-    // Check if user is admin
-    const teamMemberInfo = await ctx.db.get(teamMember._id);
-    // if (!teamMemberInfo || teamMemberInfo.role !== "admin") {
-    //   throw new Error("unauthorized: only admins can access all brands");
-    // }
-
-    // Get all brands regardless of user ownership and status
     const brands = await ctx.db
       .query("brands")
       .collect();

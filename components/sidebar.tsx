@@ -25,12 +25,16 @@ import Image from 'next/image';
 
 const navItems = [
   { icon: BarChart3, label: 'Overview', href: '/' },
+  { icon: LayoutTemplate, label: 'Agent Tasks', href: '/agent-tasks' },
   { icon: Briefcase, label: 'Brands', href: '/brands' },
   { icon: Users, label: 'Ambassadors', href: '/ambassadors' },
   { icon: ListIcon, label: 'Products', href: '/products' },
   { icon: Layers, label: 'Campaign Kits', href: '/campaigns' },
   { icon: LayoutTemplate, label: 'Campaign Templates', href: '/campaign-templates' },
   { icon: LayoutTemplate, label: 'Brand Campaigns', href: '/brand-campaigns' },
+  { icon: LayoutTemplate, label: 'Integrations', href: '/integrations' },
+  { icon: LayoutTemplate, label: 'Platform Connections', href: '/platform-connections' },
+  { icon: LayoutTemplate, label: 'Scheduled Posts', href: '/scheduled-posts' },
   { icon: Zap, label: 'AI Generation', href: '/generation' },
   { icon: LineChart, label: 'Provider Analytics', href: '/providers' },
   { icon: ShoppingCart, label: 'Shopify Monitor', href: '/shopify' },

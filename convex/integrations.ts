@@ -1,6 +1,7 @@
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { getCurrentTeamMember } from "./helpers";
 
 export const saveShopifyIntegration = internalMutation({
   args: {
@@ -48,6 +49,18 @@ export const getShopifyIntegration = query({
       .first();
       
     return integration;
+  },
+});
+
+export const getAllIntegrations = query({
+  args: {},
+  handler: async (ctx) => {
+    const teamMember = await getCurrentTeamMember(ctx);
+    if (!teamMember) {
+      throw new Error("unauthenticated");
+    }
+
+    return await ctx.db.query("integrations").collect();
   },
 });
 

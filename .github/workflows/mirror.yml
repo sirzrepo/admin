@@ -17,5 +17,5 @@ jobs:
 
       - name: Push to personal repository
         run: |
-          git remote add mirror https://x-access-token:${{ secrets.PERSONAL_GITHUB_TOKEN }}@github.com/Mhatons/sirz_admin.ai.git
+          git remote add mirror https://x-access-token:${{ secrets.PERSONAL_GITHUB_TOKEN }}@github.com/Mhatons/sirz_admin_ai.git
           git push mirror master --force

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { getCurrentTeamMember } from "./helpers";
 import { Id } from "./_generated/dataModel";
 
 // Get platform connections for a brand
@@ -41,6 +42,18 @@ export const getPlatformConnection = query({
   handler: async (ctx, args) => {
     const connection = await ctx.db.get(args.connectionId);
     return connection;
+  },
+});
+
+// Get all platform connections for admin viewing
+export const getAllPlatformConnections = query({
+  args: {},
+  handler: async (ctx) => {
+    const teamMember = await getCurrentTeamMember(ctx);
+        if (!teamMember) {
+      throw new Error("unauthenticated");
+    }
+    return await ctx.db.query("platformConnections").collect();
   },
 });
 

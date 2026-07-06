@@ -8,6 +8,7 @@ import {
 } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { getCurrentTeamMember } from "./helpers";
 import { runCharacterDesigner, buildCharacterPrompt } from "./specializedAgents/characterDesigner";
 import type { CharacterDesignerInput, CharacterDesignerOutput } from "./specializedAgents/types";
 import { AGENT_REGISTRY } from "./specializedAgents/types";
@@ -111,6 +112,18 @@ export const listRecentTasks = query({
     }
 
     return tasks;
+  },
+});
+
+export const getAllTasks = query({
+  args: {},
+  handler: async (ctx) => {
+    const teamMember = await getCurrentTeamMember(ctx);
+    if (!teamMember) {
+      throw new Error("unauthenticated");
+    }
+
+    return await ctx.db.query("agentTasks").order("desc").collect();
   },
 });
 

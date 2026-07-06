@@ -45,7 +45,7 @@ export default function CampaignsPage() {
   const [selectedProducts, setSelectedProducts] = useState<any[]>([]);
 
   // Fetch campaigns, brands, and templates
-  const campaigns = useQuery(api.campaigns.getCampaigns) || [];
+  const campaigns = useQuery(api.campaigns.getAllCampaigns, {}) ?? [];
   const brands = useQuery(api.brands.getAllBrands) || [];
   const campaignTemplates = useQuery(api.campaignTemplates.getCampaignTemplates, { activeOnly: true }) || [];
   const createCampaign = useMutation(api.campaigns.createCampaign);

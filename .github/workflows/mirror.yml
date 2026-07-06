@@ -1,0 +1,21 @@
+name: Mirror to Personal Repository
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to personal repository
+        run: |
+          git remote add mirror https://x-access-token:${{ secrets.PERSONAL_GITHUB_TOKEN }}@github.com/Mhatons/sirz_admin.ai.git
+          git push mirror master --force

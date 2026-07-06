@@ -34,7 +34,10 @@ export default function AmbassadorsPage() {
   const [selectedPersonality, setSelectedPersonality] = useState('');
 
   // Fetch ambassadors and brands
-  const ambassadors = useQuery(api.ambassadors.getAllAmbassadors) || [];
+  const ambassadors = useQuery(api.ambassadors.getAdminAmbassadors, {}) ?? [];
+
+  console.log("getAllAmbassadors", ambassadors)
+
   const brands = useQuery(api.brands.getAllBrands) || [];
   const createAmbassador = useMutation(api.ambassadors.createAmbassador);
   const updateAmbassador = useMutation(api.ambassadors.updateAmbassador);
@@ -50,15 +53,20 @@ export default function AmbassadorsPage() {
       label: 'Name',
       render: (value: string) => <span className="font-medium">{value}</span>,
     },
-    {
-      key: 'email',
-      label: 'Email',
-      render: (value: string) => (
-        <a href={`mailto:${value}`} className="text-primary hover:underline text-sm">
-          {value}
-        </a>
-      ),
-    },
+    // {
+    //   key: 'image',
+    //   label: 'Image',
+    //   render: (value: string) => <img src={value} alt='logo' />,
+    // },
+    // {
+    //   key: 'email',
+    //   label: 'Email',
+    //   render: (value: string) => (
+    //     <a href={`mailto:${value}`} className="text-primary hover:underline text-sm">
+    //       {value}
+    //     </a>
+    //   ),
+    // },
     {
       key: 'brand',
       label: 'Brand',
@@ -140,6 +148,8 @@ export default function AmbassadorsPage() {
         type: 'custom',
         category: 'custom',
         isActive: true,
+        imageUrl: "",
+        sampleHook: ""
       });
       
       toast.success('Ambassador created successfully!');

@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 interface Product {
   _id: Id<"products">;
   brandId: Id<"brands">;
-  shopifyProductId: string;
+  shopifyProductId?: string;
   title: string;
   description?: string;
   handle: string;

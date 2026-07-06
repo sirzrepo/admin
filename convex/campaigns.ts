@@ -179,6 +179,23 @@ export const updateCampaign = mutation({
   },
 });
 
+
+
+// // Get all ambassadors for admin viewing
+// export const getAllAmbassadors = query({
+//   args: {},
+//   handler: async (ctx) => {
+//     const userId = await getAuthUserId(ctx);
+//     if (!userId) return [];
+
+//     const ambassadors = await ctx.db
+//       .query("ambassadors")
+//       .collect();
+
+//     return ambassadors.sort((a, b) => b.createdAt - a.createdAt);
+//   },
+// });
+
 // Get all campaigns (admin only)
 export const getAllCampaigns = query({
   args: {},
@@ -187,12 +204,6 @@ export const getAllCampaigns = query({
     if (!teamMember) {
       throw new Error("unauthenticated");
     }
-
-    // Check if user is admin
-    const user = await ctx.db.get(teamMember._id);
-    // if (!user || user.role !== "admin") {
-    //   throw new Error("unauthorized: only admins can access all campaigns");
-    // }
 
     // Get all campaigns with brand information
     const campaigns = await ctx.db

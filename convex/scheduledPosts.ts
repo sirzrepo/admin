@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { Id } from "./_generated/dataModel";
+import { getCurrentTeamMember } from "./helpers";
 
 // Get scheduled posts for a campaign
 export const getScheduledPosts = query({
@@ -25,6 +26,18 @@ export const getScheduledPosts = query({
     }
 
     return posts.sort((a, b) => b.scheduledAt - a.scheduledAt);
+  },
+});
+
+// Get all platform connections for admin viewing
+export const getAllBrandScheduledPosts = query({
+  args: {},
+  handler: async (ctx) => {
+    const teamMember = await getCurrentTeamMember(ctx);
+        if (!teamMember) {
+      throw new Error("unauthenticated");
+    }
+    return await ctx.db.query("scheduledPosts").collect();
   },
 });
 

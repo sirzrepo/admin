@@ -23,7 +23,7 @@ import ProductForm from "./components/form";
 interface Product {
   _id: Id<"products">;
   brandId: Id<"brands">;
-  shopifyProductId: string;
+  shopifyProductId?: string;
   title: string;
   description?: string;
   handle: string;
@@ -90,10 +90,17 @@ export default function ProductsPage() {
   //  const currentUser = useQuery(api.teams.authenticated);
   const brands = useQuery(api.brands.getBrand);
   const selectedBrand = brands; // getBrand returns a single brand object
+  // const products = useQuery(
+  //   api.products.listProducts,
+  //   selectedBrand ? { brandId: selectedBrand._id, paginationOpts: { numItems: 100, cursor: null } } : "skip"
+  // );
+
   const products = useQuery(
-    api.products.listProducts,
-    selectedBrand ? { brandId: selectedBrand._id, paginationOpts: { numItems: 100, cursor: null } } : "skip"
+    api.products.listAllProducts,{ 
+      paginationOpts: { numItems: 100, cursor: null } }
   );
+
+  console.log("products$$$$$$$$$$$$", products);
 
   
 
@@ -254,17 +261,17 @@ export default function ProductsPage() {
     }
   };
 
-  if (!selectedBrand) {
-    return (
-      <div className="container mx-auto py-8">
-        <div className="text-center">
-          <Package className="mx-auto h-12 w-12 text-gray-400" />
-          <h2 className="mt-2 text-lg font-semibold">No Brand Found</h2>
-          <p className="mt-1 text-sm text-gray-500">Please create a brand first to manage products.</p>
-        </div>
-      </div>
-    );
-  }
+  // if (!selectedBrand) {
+  //   return (
+  //     <div className="container mx-auto py-8">
+  //       <div className="text-center">
+  //         <Package className="mx-auto h-12 w-12 text-gray-400" />
+  //         <h2 className="mt-2 text-lg font-semibold">No Brand Found</h2>
+  //         <p className="mt-1 text-sm text-gray-500">Please create a brand first to manage products.</p>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="container mx-auto py-8">

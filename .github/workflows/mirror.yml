@@ -1,20 +1,23 @@
-name: Mirror Repository
+name: Test PAT
 
 on:
-  push:
-    branches:
-      - master
+  workflow_dispatch:
 
 jobs:
-  mirror:
+  test:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Test GitHub API
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+        run: |
+          curl -L \
+            -H "Authorization: token ${GH_TOKEN}" \
+            https://api.github.com/repos/Mhatons/sirz_admin_ai
 
-      - uses: pixta-dev/repository-mirroring-action@v1
-        with:
-          target_repo_url: https://github.com/Mhatons/sirz_admin_ai.git
-          ssh_private_key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Clone repository
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+        run: |
+          git clone https://x-access-token:${GH_TOKEN}@github.com/Mhatons/sirz_admin_ai.git

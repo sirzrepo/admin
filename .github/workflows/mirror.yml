@@ -1,23 +1,23 @@
-name: Test PAT
+name: Debug Token
 
 on:
   workflow_dispatch:
 
 jobs:
-  test:
+  debug:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Test GitHub API
+      - name: Check secret
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+        run: |
+          echo "Length: ${#GH_TOKEN}"
+
+      - name: GitHub API
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
         run: |
           curl -L \
             -H "Authorization: token ${GH_TOKEN}" \
-            https://api.github.com/repos/Mhatons/sirz_admin_ai
-
-      - name: Clone repository
-        env:
-          GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
-        run: |
-          git clone https://x-access-token:${GH_TOKEN}@github.com/Mhatons/sirz_admin_ai.git
+            https://api.github.com/user

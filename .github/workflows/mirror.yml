@@ -19,7 +19,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
         run: |
-          git remote add mirror https://x-access-token:${GH_TOKEN}@github.com/Mhatons/sirz_admin_ai.git
+          git remote add mirror https://username:${GH_TOKEN}@github.com/Mhatons/sirz_admin_ai.git
 
           git push mirror --all
           git push mirror --tags
@@ -28,7 +28,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
         run: |
-          git remote add mirror https://x-access-token:${GH_TOKEN}@github.com/Mhatons/sirz_admin_ai.git
+          git remote add mirror https://username:${GH_TOKEN}@github.com/Mhatons/sirz_admin_ai.git
 
       - name: Push mirror
         run: |
@@ -38,7 +38,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
         run: |
-          git ls-remote https://x-access-token:${GH_TOKEN}@github.com/Mhatons/sirz_admin_ai.git
+          git ls-remote https://username:${GH_TOKEN}@github.com/Mhatons/sirz_admin_ai.git
+
+    # git remote set-url origin https://username:token@github.com/put_username_here/repo-name.git
+
 
       
           

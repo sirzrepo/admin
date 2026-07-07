@@ -1,37 +1,29 @@
-name: Debug Token
+name: Mirror to Personal Repository
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - master
 
 jobs:
-  debug:
+  mirror:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check secret
-        env:
-          GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
-        run: |
-          echo "Length: ${#GH_TOKEN}"
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: GitHub API
+      - name: Push to personal repository
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
         run: |
-          curl -L \
-            -H "Authorization: token ${GH_TOKEN}" \
-            https://api.github.com/user
-          
-      - name: Check repository access
-        env:
-          GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
-        run: |
-          curl -L \
-            -H "Authorization: token ${GH_TOKEN}" \
-            https://api.github.com/repos/Mhatons/sirz_admin_ai
+          git remote add mirror https://x-access-token:${GH_TOKEN}@github.com/Mhatons/sirz_admin_ai.git
+          git push --mirror mirror
 
-      - name: Test Git over HTTPS
+      - name: Verify remote
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
         run: |
-          GIT_CURL_VERBOSE=1 git ls-remote https://x-access-token:${GH_TOKEN}@github.com/Mhatons/sirz_admin_ai.git
+          git ls-remote https://x-access-token:${GH_TOKEN}@github.com/Mhatons/sirz_admin_ai.git

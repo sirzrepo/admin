@@ -21,9 +21,9 @@ jobs:
         run: |
           git remote add mirror https://x-access-token:${GH_TOKEN}@github.com/Mhatons/sirz_admin_ai.git
 
-      - name: Push mirror
-        run: |
-          git push --mirror mirror
+      # - name: Push mirror
+      #   run: |
+      #     git push --mirror mirror
 
       - name: Verify remote
         env:
@@ -42,9 +42,9 @@ jobs:
           git remote get-url mirror
           git config --get remote.mirror.url
 
-      - name: Push
-        run: |
-          git push --mirror mirror
+      # - name: Push
+      #   run: |
+      #     git push --mirror mirror
       - name: Push
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}

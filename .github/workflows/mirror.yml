@@ -40,8 +40,6 @@ jobs:
         run: |
           git ls-remote https://username:${GH_TOKEN}@github.com/Mhatons/adminSirz.git
 
-    # git remote set-url origin https://username:token@github.com/put_username_here/repo-name.git
-
 
       
           

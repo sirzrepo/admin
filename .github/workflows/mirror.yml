@@ -3,7 +3,7 @@ name: Mirror to Personal Repository
 on:
   push:
     branches:
-      - master
+      - dev
 
 jobs:
   mirror:
@@ -15,11 +15,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Push branches
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+        run: |
+          git remote add mirror https://username:${GH_TOKEN}@github.com/Mhatons/adminSirz.git
+
+          git push mirror --all
+          git push mirror --tags
+
       - name: Add mirror remote
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
         run: |
-          git remote add mirror https://x-access-token:${GH_TOKEN}@github.com/Mhatons/sirz_admin_ai.git
+          git remote add mirror https://username:${GH_TOKEN}@github.com/Mhatons/adminSirz.git
 
       - name: Push mirror
         run: |
@@ -29,5 +38,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
         run: |
-          git ls-remote https://x-access-token:${GH_TOKEN}@github.com/Mhatons/sirz_admin_ai.git
+          git ls-remote https://username:${GH_TOKEN}@github.com/Mhatons/adminSirz.git
+
+
+      
+          
 

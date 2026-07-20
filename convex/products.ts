@@ -1,13 +1,13 @@
-import { action, internalMutation, mutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { Id } from "./_generated/dataModel";
+import { getCurrentTeamMember } from "./helpers";
 
 // Public query for the UI to list synced products (paginated)
 export const listProducts = query({
-  args: { 
+  args: {
     brandId: v.id("brands"),
     paginationOpts: paginationOptsValidator,
   },
@@ -15,20 +15,77 @@ export const listProducts = query({
     return await ctx.db
       .query("products")
       .withIndex("by_brandId", (q) => q.eq("brandId", args.brandId))
+      .order("desc")
       .paginate(args.paginationOpts);
   }
 });
 
-// Admin query to list all synced products across brands (paginated)
-export const listAllProducts = query({
+// Paginated full-text search over products.title scoped to a brand.
+// Empty query falls back to the regular paginated list so the same hook
+// powers both "browse" and "search" without an extra request flip.
+export const searchProducts = query({
   args: {
+    brandId: v.id("brands"),
+    query: v.string(),
     paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
+    const q = args.query.trim();
+    if (!q) {
+      return await ctx.db
+        .query("products")
+        .withIndex("by_brandId", (idx) => idx.eq("brandId", args.brandId))
+        .order("desc")
+        .paginate(args.paginationOpts);
+    }
+    // Search results are relevance-ordered, not creation-ordered.
     return await ctx.db
       .query("products")
+      .withSearchIndex("search_title", (s) =>
+        s.search("title", q).eq("brandId", args.brandId),
+      )
       .paginate(args.paginationOpts);
-  }
+  },
+});
+
+// Distinct values for category / productType / vendor scoped to a brand,
+// used to power autocomplete suggestions on the manual product form.
+// Caps at 200 products to bound work; brands with larger catalogs still get
+// a representative suggestion set without paginating.
+export const getProductFacets = query({
+  args: { brandId: v.id("brands") },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("products")
+      .withIndex("by_brandId", (q) => q.eq("brandId", args.brandId))
+      .take(200);
+
+    const categories = new Set<string>();
+    const productTypes = new Set<string>();
+    const vendors = new Set<string>();
+    const currencyCounts = new Map<string, number>();
+    for (const r of rows) {
+      if (r.category) categories.add(r.category);
+      if (r.productType) productTypes.add(r.productType);
+      if (r.vendor) vendors.add(r.vendor);
+      const cc = r.priceRange?.currencyCode;
+      if (cc) currencyCounts.set(cc, (currencyCounts.get(cc) ?? 0) + 1);
+    }
+    let dominantCurrency: string | undefined;
+    let best = 0;
+    for (const [cc, count] of currencyCounts) {
+      if (count > best) {
+        best = count;
+        dominantCurrency = cc;
+      }
+    }
+    return {
+      categories: Array.from(categories).sort(),
+      productTypes: Array.from(productTypes).sort(),
+      vendors: Array.from(vendors).sort(),
+      dominantCurrency,
+    };
+  },
 });
 
 // Non-paginated collect query used by the Brand Agent tool (agents can't use paginationOpts)
@@ -42,6 +99,15 @@ export const listProductsForAgent = query({
   }
 });
 
+export const listProductsInternal = internalQuery({
+  args: { brandId: v.id("brands") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("products")
+      .withIndex("by_brandId", (q) => q.eq("brandId", args.brandId))
+      .take(20);
+  },
+});
 
 // Single product upsert (used by both bulk sync and webhooks)
 export const upsertProduct = internalMutation({
@@ -58,7 +124,7 @@ export const upsertProduct = internalMutation({
 
     // Map Shopify GraphQL response to our schema
     const title = productData.title;
-    // Shopify can return null for empty descriptions — coerce to undefined so Convex optional fields are satisfied
+    // Shopify can return null for empty descriptions - coerce to undefined so Convex optional fields are satisfied
     const description = productData.descriptionHtml || productData.body_html || undefined;
     const handle = productData.handle;
     const productType = productData.productType || productData.product_type || undefined;
@@ -82,14 +148,14 @@ export const upsertProduct = internalMutation({
 
     let priceRange: { minPrice: string; maxPrice: string; currencyCode: string } | undefined;
     if (productData.priceRangeV2) {
-      // GraphQL bulk sync path — priceRangeV2 has exact min/max across all variants
+      // GraphQL bulk sync path - priceRangeV2 has exact min/max across all variants
       priceRange = {
         minPrice: productData.priceRangeV2.minVariantPrice.amount,
         maxPrice: productData.priceRangeV2.maxVariantPrice.amount,
         currencyCode: productData.priceRangeV2.minVariantPrice.currencyCode,
       };
     } else if (productData.variants && productData.variants.length > 0) {
-      // REST webhook path — compute actual min/max across all variants
+      // REST webhook path - compute actual min/max across all variants
       const prices: number[] = (productData.variants as any[])
         .map((v: any) => parseFloat(v.price))
         .filter((p: number) => !isNaN(p));
@@ -106,7 +172,7 @@ export const upsertProduct = internalMutation({
       }
     }
 
-    // Build payload without explicit `undefined` values — Convex strict types require optional
+    // Build payload without explicit `undefined` values - Convex strict types require optional
     // fields to be omitted rather than set to undefined.
     const payload = {
       brandId,
@@ -138,6 +204,166 @@ export const upsertProduct = internalMutation({
       await ctx.db.insert("products", payload);
     }
   }
+});
+
+// ─── createManualProduct - user-entered product with optional image ───────────
+
+export const createManualProduct = mutation({
+  args: {
+    brandId: v.id("brands"),
+    title: v.string(),
+    imageUrl: v.optional(v.string()),
+    productType: v.optional(v.string()),
+    description: v.optional(v.string()),
+    vendor: v.optional(v.string()),
+    category: v.optional(v.string()),
+    stockCount: v.optional(v.number()),
+    price: v.optional(v.string()),
+    currencyCode: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("unauthenticated");
+
+    const brand = await ctx.db.get(args.brandId);
+    if (!brand || brand.userId !== userId) throw new Error("not authorized");
+
+    const handle = args.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+    const priceRange = args.price && args.price.trim()
+      ? {
+          minPrice: args.price.trim(),
+          maxPrice: args.price.trim(),
+          currencyCode: (args.currencyCode || "USD").toUpperCase(),
+        }
+      : undefined;
+
+    const productId = await ctx.db.insert("products", {
+      brandId: args.brandId,
+      source: "manual",
+      title: args.title,
+      description: args.description,
+      handle,
+      productType: args.productType,
+      vendor: args.vendor,
+      status: "ACTIVE",
+      tags: [],
+      imageUrl: args.imageUrl,
+      priceRange,
+      variantCount: 1,
+      stockCount: args.stockCount,
+      category: args.category,
+      syncedAt: Date.now(),
+    });
+
+    return productId;
+  },
+});
+
+// Public: update a manually-added product.
+// Shopify-synced rows are intentionally read-only here so the next sync
+// can't silently clobber a local edit; only `source === "manual"` rows
+// are editable.
+export const updateManualProduct = mutation({
+  args: {
+    productId: v.id("products"),
+    title: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    productType: v.optional(v.string()),
+    description: v.optional(v.string()),
+    vendor: v.optional(v.string()),
+    category: v.optional(v.string()),
+    stockCount: v.optional(v.number()),
+    price: v.optional(v.string()),
+    currencyCode: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("unauthenticated");
+    const product = await ctx.db.get(args.productId);
+    if (!product) throw new Error("product not found");
+    const brand = await ctx.db.get(product.brandId);
+    if (!brand || brand.userId !== userId) throw new Error("not authorized");
+    if (product.source !== "manual") throw new Error("only manual products can be edited");
+
+    const patch: Record<string, unknown> = {};
+    if (args.title !== undefined) {
+      const t = args.title.trim();
+      if (!t) throw new Error("title cannot be empty");
+      patch.title = t;
+      patch.handle = t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    }
+    if (args.imageUrl !== undefined) patch.imageUrl = args.imageUrl.trim() || undefined;
+    if (args.productType !== undefined) patch.productType = args.productType.trim() || undefined;
+    if (args.description !== undefined) patch.description = args.description.trim() || undefined;
+    if (args.vendor !== undefined) patch.vendor = args.vendor.trim() || undefined;
+    if (args.category !== undefined) patch.category = args.category.trim() || undefined;
+    if (args.stockCount !== undefined) {
+      patch.stockCount = Number.isFinite(args.stockCount) ? args.stockCount : undefined;
+    }
+    // Price + currency are coupled: only patch priceRange when at least one is provided.
+    if (args.price !== undefined || args.currencyCode !== undefined) {
+      const price = (args.price ?? product.priceRange?.minPrice ?? "").trim();
+      if (price) {
+        patch.priceRange = {
+          minPrice: price,
+          maxPrice: price,
+          currencyCode: (args.currencyCode || product.priceRange?.currencyCode || "USD").toUpperCase(),
+        };
+      } else {
+        patch.priceRange = undefined;
+      }
+    }
+
+    await ctx.db.patch(args.productId, patch);
+  },
+});
+
+// Public: hard-delete a manually-added product. Shopify-synced rows must go
+// through archiveProduct instead so a re-sync can naturally restore them.
+export const deleteManualProduct = mutation({
+  args: { productId: v.id("products") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("unauthenticated");
+    const product = await ctx.db.get(args.productId);
+    if (!product) throw new Error("product not found");
+    const brand = await ctx.db.get(product.brandId);
+    if (!brand || brand.userId !== userId) throw new Error("not authorized");
+    if (product.source !== "manual") throw new Error("only manual products can be deleted");
+    await ctx.db.delete(args.productId);
+  },
+});
+
+// Public: archive a product (soft delete - status flip).
+// Manual products created in v2 + Shopify-synced rows both go through this.
+export const archiveProduct = mutation({
+  args: { productId: v.id("products") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("unauthenticated");
+    const product = await ctx.db.get(args.productId);
+    if (!product) throw new Error("product not found");
+    const brand = await ctx.db.get(product.brandId);
+    if (!brand || brand.userId !== userId) throw new Error("not authorized");
+    await ctx.db.patch(args.productId, { status: "ARCHIVED" });
+  },
+});
+
+// Public: restore an archived product.
+// For Shopify products, a later sync can still overwrite status with Shopify's
+// current status. Manual products simply return to ACTIVE.
+export const unarchiveProduct = mutation({
+  args: { productId: v.id("products") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("unauthenticated");
+    const product = await ctx.db.get(args.productId);
+    if (!product) throw new Error("product not found");
+    const brand = await ctx.db.get(product.brandId);
+    if (!brand || brand.userId !== userId) throw new Error("not authorized");
+    await ctx.db.patch(args.productId, { status: "ACTIVE" });
+  },
 });
 
 export const deleteProduct = internalMutation({
@@ -222,11 +448,20 @@ export const syncProducts = action({
   args: {
     integrationId: v.id("integrations"),
     brandId: v.id("brands"),
-    accessToken: v.string(),
-    domain: v.string()
+    // accessToken / domain accepted for backward compatibility with existing
+    // callers (frontend passes them) but ignored - we always look up the live
+    // token via the integration row and refresh if expired.
+    accessToken: v.optional(v.string()),
+    domain: v.optional(v.string())
   },
   handler: async (ctx, args) => {
-    const { integrationId, brandId, accessToken, domain } = args;
+    const { integrationId, brandId } = args;
+
+    // Resolve a fresh access token (refreshes if near/past expiry).
+    const { accessToken, domain } = await ctx.runAction(
+      internal.integrations.getValidShopifyAccessToken,
+      { integrationId }
+    );
 
     // Mark as syncing
     await ctx.runMutation(internal.products.updateSyncStatus, {
@@ -237,7 +472,7 @@ export const syncProducts = action({
     try {
       console.log(`[ProductSync] Starting bulk sync for brand ${brandId} (Integration: ${integrationId})`);
       console.log(`[ProductSync] Target store domain: ${domain}`);
-      
+
       let hasNextPage: boolean = true;
       let cursor: string | null = null;
       let totalSynced = 0;
@@ -314,13 +549,17 @@ export const syncProducts = action({
   }
 });
 
-// Get a single product by ID
-export const getProduct = query({
-  args: { productId: v.id("products") },
-  handler: async (ctx, args) => {
-    const product = await ctx.db.get(args.productId);
-    return product;
+
+// Admin query to list all synced products across brands (paginated)
+export const listAllProducts = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
   },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("products")
+      .paginate(args.paginationOpts);
+  }
 });
 
 // Create a new product (manual creation)
@@ -345,13 +584,9 @@ export const createProduct = mutation({
     category: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    // Verify user owns the brand
-    const brand = await ctx.db.get(args.brandId);
-    if (!brand || brand.userId !== userId) {
-      throw new Error("Not authorized to create products for this brand");
+    const teamMember = await getCurrentTeamMember(ctx);
+    if (!teamMember) {
+      throw new Error("unauthenticated");
     }
 
     // Generate a unique shopifyProductId for manual creation
@@ -401,16 +636,9 @@ export const updateProduct = mutation({
     category: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    const product = await ctx.db.get(args.productId);
-    if (!product) throw new Error("Product not found");
-
-    // Verify user owns the brand
-    const brand = await ctx.db.get(product.brandId);
-    if (!brand || brand.userId !== userId) {
-      throw new Error("Not authorized to update this product");
+    const teamMember = await getCurrentTeamMember(ctx);
+    if (!teamMember) {
+      throw new Error("unauthenticated");
     }
 
     const updateData: any = {};
@@ -437,16 +665,9 @@ export const updateProduct = mutation({
 export const deleteProductMutation = mutation({
   args: { productId: v.id("products") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    const product = await ctx.db.get(args.productId);
-    if (!product) throw new Error("Product not found");
-
-    // Verify user owns the brand
-    const brand = await ctx.db.get(product.brandId);
-    if (!brand || brand.userId !== userId) {
-      throw new Error("Not authorized to delete this product");
+    const teamMember = await getCurrentTeamMember(ctx);
+    if (!teamMember) {
+      throw new Error("unauthenticated");
     }
 
     await ctx.db.delete(args.productId);

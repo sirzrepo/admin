@@ -31,8 +31,21 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { mockAnalytics } from '@/lib/mock-data';
+import { useQuery } from 'convex/react';
+import { api } from '../convex/_generated/api';
 
 export default function OverviewPage() {
+
+  const campaignCount = useQuery(api.adminAnalytics.getTotalCampaignCount);
+  const ambassadorCount = useQuery(api.adminAnalytics.getActiveAmbassadorCount);
+
+  const campaignActivity = useQuery(api.adminAnalytics.getCampaignActivity);
+
+  const platformStats = useQuery(api.adminAnalytics.getPlatformConnectionStats);
+
+  const generationVolume = useQuery(api.adminAnalytics.getAiGenerationVolume);
+
+
   const chartConfig = {
     campaigns: {
       label: 'Campaigns',
@@ -69,28 +82,28 @@ export default function OverviewPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Total Campaigns"
-          value={mockAnalytics.overview.totalCampaigns}
+          value={campaignCount ?? 0}
           trend={{ value: 8, isPositive: true }}
           icon={<Briefcase className="w-8 h-8" />}
           description="Active this month"
         />
         <StatCard
           label="Active Ambassadors"
-          value={mockAnalytics.overview.totalAmbassadors}
+          value={ambassadorCount?.total ?? 0}
           trend={{ value: 12, isPositive: true }}
           icon={<Users className="w-8 h-8" />}
           description="Across all brands"
         />
         <StatCard
           label="AI Generations"
-          value={mockAnalytics.overview.aiGenerations}
+          value={generationVolume?.total ?? 0}
           trend={{ value: 24, isPositive: true }}
           icon={<Zap className="w-8 h-8" />}
           description="This month"
         />
         <StatCard
-          label="Total Revenue"
-          value={mockAnalytics.overview.totalRevenue}
+          label="Platform Connections"
+          value={platformStats?.total ?? 0}
           trend={{ value: 5, isPositive: true }}
           icon={<TrendingUp className="w-8 h-8" />}
           description="Year to date"
@@ -106,7 +119,7 @@ export default function OverviewPage() {
             <p className="text-sm text-muted-foreground mt-1">Weekly generation metrics</p>
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={mockAnalytics.campaignActivity}>
+            <LineChart data={campaignActivity?.chart ?? []}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
               <XAxis dataKey="date" stroke="rgba(255,255,255,0.5)" />
               <YAxis stroke="rgba(255,255,255,0.5)" />
@@ -152,7 +165,7 @@ export default function OverviewPage() {
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
-                data={mockAnalytics.providerCosts}
+                data={platformStats?.chart ?? []}
                 cx="50%"
                 cy="50%"
                 labelLine={false}
@@ -161,7 +174,7 @@ export default function OverviewPage() {
                 fill="#8884d8"
                 dataKey="value"
               >
-                {mockAnalytics.providerCosts.map((entry, index) => (
+                {platformStats?.chart.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
                 ))}
               </Pie>
@@ -178,7 +191,7 @@ export default function OverviewPage() {
           <p className="text-sm text-muted-foreground mt-1">Total items generated this month</p>
         </div>
         <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={mockAnalytics.generationVolume}>
+          <BarChart data={generationVolume?.chart ?? []}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
             <XAxis dataKey="type" stroke="rgba(255,255,255,0.5)" />
             <YAxis stroke="rgba(255,255,255,0.5)" />

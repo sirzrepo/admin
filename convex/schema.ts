@@ -1,4 +1,3 @@
-
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
@@ -307,10 +306,18 @@ export default defineSchema({
     postedAt: v.optional(v.number()),
     status: v.string(),
     tiktokSettings: v.optional(v.object({
-      privacyLevel: v.optional(v.string()),
+      privacyLevel: v.optional(v.union(
+        v.literal("PUBLIC_TO_EVERYONE"),
+        v.literal("MUTUAL_FOLLOW_FRIENDS"),
+        v.literal("FOLLOWER_OF_CREATOR"),
+        v.literal("SELF_ONLY"),
+      )),
       disableComment: v.optional(v.boolean()),
       disableDuet: v.optional(v.boolean()),
       disableStitch: v.optional(v.boolean()),
+      contentDisclosureEnabled: v.optional(v.boolean()),
+      brandOrganicToggle: v.optional(v.boolean()),
+      brandContentToggle: v.optional(v.boolean()),
       coverTimestampMs: v.optional(v.number()),
     })),
     platformPostId: v.optional(v.string()),
@@ -342,10 +349,18 @@ export default defineSchema({
     assetTaskId: v.optional(v.id("agentTasks")),
     assetName: v.optional(v.string()),
     tiktokSettings: v.optional(v.object({
-      privacyLevel: v.optional(v.string()),
+      privacyLevel: v.optional(v.union(
+        v.literal("PUBLIC_TO_EVERYONE"),
+        v.literal("MUTUAL_FOLLOW_FRIENDS"),
+        v.literal("FOLLOWER_OF_CREATOR"),
+        v.literal("SELF_ONLY"),
+      )),
       disableComment: v.optional(v.boolean()),
       disableDuet: v.optional(v.boolean()),
       disableStitch: v.optional(v.boolean()),
+      contentDisclosureEnabled: v.optional(v.boolean()),
+      brandOrganicToggle: v.optional(v.boolean()),
+      brandContentToggle: v.optional(v.boolean()),
       coverTimestampMs: v.optional(v.number()),
     })),
     scheduledAt: v.optional(v.number()),
@@ -406,6 +421,13 @@ export default defineSchema({
     // Campaign linkage for campaign-generated tasks
     campaignId: v.optional(v.id("campaigns")),
     angleId: v.optional(v.string()),
+    // Billing/credit metadata. These are optional so historical tasks stay
+    // valid and manual uploads remain no-credit records.
+    reservationId: v.optional(v.id("creditReservations")),
+    skuKey: v.optional(v.string()),
+    creditSource: v.optional(v.string()),
+    creditsPriced: v.optional(v.number()),
+    creditsChargedToCustomer: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -413,6 +435,280 @@ export default defineSchema({
     .index("by_brandId_status", ["brandId", "status"])
     .index("by_brandId_agentType", ["brandId", "agentType"])
     .index("by_falRequestId", ["falRequestId"])
+    .index("by_campaignId", ["campaignId"]),
+
+  // Billing: configurable plan definitions. Seeded from billingConfig.ts
+  // first, then editable by admin UI later.
+  billingPlans: defineTable({
+    key: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    priceMonthlyCents: v.number(),
+    currency: v.string(),
+    includedCredits: v.number(),
+    lowCreditThreshold: v.optional(v.number()),
+    maxBrands: v.number(),
+    maxSeats: v.number(),
+    features: v.any(),
+    limits: v.any(),
+    stripePriceId: v.optional(v.string()),
+    isActive: v.boolean(),
+    version: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_isActive", ["isActive"]),
+
+  billingSettings: defineTable({
+    key: v.string(),
+    trialDurationDays: v.number(),
+    trialCredits: v.number(),
+    trialLowCreditThreshold: v.optional(v.number()),
+    trialTemplateLimit: v.optional(v.number()),
+    trialTemplateRefreshEnabled: v.optional(v.boolean()),
+    trialTemplateRefreshDays: v.optional(v.number()),
+    trialTemplateAiCovers: v.optional(v.boolean()),
+    templateBasePoolEvergreenTarget: v.optional(v.number()),
+    templateBasePoolSeasonalEvergreenTarget: v.optional(v.number()),
+    templateBasePoolSeasonalEventTarget: v.optional(v.number()),
+    // Legacy names retained only so existing dev/staging rows stay readable.
+    templateBasePoolTrendingTarget: v.optional(v.number()),
+    templateBasePoolSeasonalTrendingTarget: v.optional(v.number()),
+    templateBasePoolSeasonalTarget: v.optional(v.number()),
+    creditPurchaseInvoicePolicy: v.optional(v.union(
+      v.literal("receipt_only"),
+      v.literal("always"),
+      v.literal("on_request"),
+    )),
+    requirePaymentMethodForTrial: v.boolean(),
+    allowTopUpsDuringTrial: v.boolean(),
+    oneTrialPerAccount: v.boolean(),
+    defaultCreditValueCents: v.number(),
+    defaultMarkup: v.number(),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+
+  subscriptions: defineTable({
+    userId: v.string(),
+    planKey: v.string(),
+    planVersion: v.number(),
+    status: v.string(),
+    stripeCustomerId: v.optional(v.string()),
+    stripeSubscriptionId: v.optional(v.string()),
+    currentPeriodStart: v.number(),
+    currentPeriodEnd: v.number(),
+    trialStartedAt: v.optional(v.number()),
+    trialEndsAt: v.optional(v.number()),
+    trialCreditsGranted: v.optional(v.number()),
+    manualTrialActivationAt: v.optional(v.number()),
+    convertedAt: v.optional(v.number()),
+    cancelAtPeriodEnd: v.optional(v.boolean()),
+    previousPlanKey: v.optional(v.string()),
+    pendingPlanKey: v.optional(v.string()),
+    pendingUpgradeCredits: v.optional(v.number()),
+    pendingPlanChangedAt: v.optional(v.number()),
+    pendingPlanEffectiveAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_stripeCustomerId", ["stripeCustomerId"])
+    .index("by_stripeSubscriptionId", ["stripeSubscriptionId"]),
+
+  creditAccounts: defineTable({
+    userId: v.string(),
+    availableCredits: v.number(),
+    reservedCredits: v.number(),
+    lifetimePurchasedCredits: v.number(),
+    lifetimeGrantedCredits: v.number(),
+    lifetimeConsumedCredits: v.number(),
+    currentPeriodGrantedCredits: v.number(),
+    planKey: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
+  creditTopUpPackages: defineTable({
+    key: v.string(),
+    label: v.string(),
+    description: v.optional(v.string()),
+    credits: v.number(),
+    priceCents: v.number(),
+    currency: v.string(),
+    expiresAfterDays: v.optional(v.number()),
+    stripePriceId: v.optional(v.string()),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_isActive", ["isActive"]),
+
+  stripeCheckoutSessions: defineTable({
+    userId: v.string(),
+    mode: v.string(),
+    status: v.string(),
+    stripeSessionId: v.string(),
+    stripeCustomerId: v.optional(v.string()),
+    stripeSubscriptionId: v.optional(v.string()),
+    planKey: v.optional(v.string()),
+    packageKey: v.optional(v.string()),
+    credits: v.optional(v.number()),
+    amountCents: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    url: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_stripeSessionId", ["stripeSessionId"])
+    .index("by_stripeCustomerId", ["stripeCustomerId"]),
+
+  billingWebhookEvents: defineTable({
+    stripeEventId: v.string(),
+    type: v.string(),
+    status: v.string(),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    processedAt: v.optional(v.number()),
+  }).index("by_stripeEventId", ["stripeEventId"]),
+
+  billingTransactions: defineTable({
+    key: v.string(),
+    userId: v.string(),
+    type: v.string(),
+    status: v.string(),
+    title: v.string(),
+    amountCents: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    credits: v.optional(v.number()),
+    stripeCustomerId: v.optional(v.string()),
+    stripeSessionId: v.optional(v.string()),
+    stripeInvoiceId: v.optional(v.string()),
+    stripePaymentIntentId: v.optional(v.string()),
+    stripeChargeId: v.optional(v.string()),
+    receiptUrl: v.optional(v.string()),
+    invoiceUrl: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    occurredAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_userId_occurredAt", ["userId", "occurredAt"]),
+
+  emailDeliveries: defineTable({
+    key: v.string(),
+    userId: v.string(),
+    type: v.string(),
+    recipient: v.string(),
+    status: v.string(),
+    attempts: v.number(),
+    providerMessageId: v.optional(v.string()),
+    error: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    sentAt: v.optional(v.number()),
+  })
+    .index("by_key", ["key"])
+    .index("by_userId", ["userId"]),
+
+  creditLedger: defineTable({
+    userId: v.string(),
+    brandId: v.optional(v.id("brands")),
+    campaignId: v.optional(v.id("campaigns")),
+    taskId: v.optional(v.id("agentTasks")),
+    reservationId: v.optional(v.id("creditReservations")),
+    type: v.string(),
+    amount: v.number(),
+    balanceAfter: v.optional(v.number()),
+    skuKey: v.optional(v.string()),
+    creditSource: v.optional(v.string()),
+    reason: v.string(),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+    createdBy: v.optional(v.string()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_brandId", ["brandId"])
+    .index("by_taskId", ["taskId"])
+    .index("by_reservationId", ["reservationId"]),
+
+  creditReservations: defineTable({
+    userId: v.string(),
+    brandId: v.optional(v.id("brands")),
+    campaignId: v.optional(v.id("campaigns")),
+    taskId: v.optional(v.id("agentTasks")),
+    status: v.string(),
+    estimatedCredits: v.number(),
+    chargedCredits: v.number(),
+    releasedCredits: v.number(),
+    featureKey: v.string(),
+    skuBreakdown: v.any(),
+    creditSource: v.string(),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_status", ["userId", "status"])
+    .index("by_campaignId", ["campaignId"])
+    .index("by_taskId", ["taskId"]),
+
+  aiSkus: defineTable({
+    key: v.string(),
+    label: v.string(),
+    provider: v.string(),
+    model: v.string(),
+    unitType: v.string(),
+    providerCostPerUnitCents: v.number(),
+    creditValueOverrideCents: v.optional(v.number()),
+    markupOverride: v.optional(v.number()),
+    defaultCreditSource: v.string(),
+    isActive: v.boolean(),
+    effectiveFrom: v.number(),
+    effectiveTo: v.optional(v.number()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_isActive", ["isActive"]),
+
+  generationThrottleBuckets: defineTable({
+    userId: v.string(),
+    featureKey: v.string(),
+    windowStartedAt: v.number(),
+    count: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user_feature", ["userId", "featureKey"]),
+
+  aiUsageEvents: defineTable({
+    userId: v.optional(v.string()),
+    brandId: v.optional(v.id("brands")),
+    taskId: v.optional(v.id("agentTasks")),
+    campaignId: v.optional(v.id("campaigns")),
+    featureKey: v.string(),
+    skuKey: v.string(),
+    provider: v.string(),
+    model: v.string(),
+    units: v.number(),
+    estimatedProviderCostCents: v.number(),
+    creditsPriced: v.number(),
+    creditsChargedToCustomer: v.number(),
+    creditSource: v.string(),
+    status: v.string(),
+    providerRequestId: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_brandId", ["brandId"])
+    .index("by_taskId", ["taskId"])
     .index("by_campaignId", ["campaignId"]),
 
   // Tone Presets - admin-manageable voice presets for brand tone step
@@ -455,7 +751,8 @@ export default defineSchema({
 
 
 
-  // ..................................................
+    // -------------------------------------- Admin Specifics ----------------------------------------------------------
+
 
   invites: defineTable({
     email: v.string(),
@@ -519,6 +816,7 @@ export default defineSchema({
     .index('by_permission', ['permissionId'])
     .index('by_permission_role', ['permissionId', 'roleId']),
 });
+
 
 
 

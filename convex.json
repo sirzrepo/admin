@@ -1,0 +1,7 @@
+
+{
+  "node": {
+    "nodeVersion": "22",
+    "externalPackages": ["sharp"]
+  }
+}

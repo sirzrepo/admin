@@ -1,6 +1,7 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalQuery } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { getCurrentTeamMember } from "./helpers";
 
 export const getMe = query({
   args: {},
@@ -14,46 +15,11 @@ export const getMe = query({
   },
 });
 
-export const getAllUsers = query({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      return [];
-    }
-
-    // Check if user is admin
-    const user = await ctx.db.get(userId);
-    if (!user || user.role !== "admin") {
-      return [];
-    }
-
-    return await ctx.db.query("users").collect();
-  },
-});
-
-export const updateRole = mutation({
-  args: { 
-    userId: v.id("users"),
-    role: v.union(v.literal("admin"), v.literal("user"))
-  },
+export const getUserById = internalQuery({
+  args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    const currentUserId = await getAuthUserId(ctx);
-    if (!currentUserId) throw new Error("Not authenticated");
-    
-    // Check if current user is admin
-    const currentUser = await ctx.db.get(currentUserId);
-    if (!currentUser || currentUser.role !== "admin") {
-      throw new Error("Only admins can update user roles");
-    }
-    
-    // Prevent users from changing their own role
-    if (currentUserId === args.userId) {
-      throw new Error("Cannot change your own role");
-    }
-    
-    await ctx.db.patch(args.userId, { role: args.role });
-  }
+    return await ctx.db.get(args.userId);
+  },
 });
 
 export const updateName = mutation({
@@ -61,7 +27,30 @@ export const updateName = mutation({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
-    
+
     await ctx.db.patch(userId, { name: args.name });
   }
+});
+
+export const updateAvatar = mutation({
+  args: { imageUrl: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    await ctx.db.patch(userId, { image: args.imageUrl });
+  }
+});
+
+
+// admin schema
+export const getAllUsers = query({
+  args: {},
+  handler: async (ctx) => {
+    const teamMember = await getCurrentTeamMember(ctx);
+    if (!teamMember) {
+      throw new Error("unauthenticated");
+    }
+
+    return await ctx.db.query("users").collect();
+  },
 });

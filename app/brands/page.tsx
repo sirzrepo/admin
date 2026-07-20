@@ -130,27 +130,26 @@ export default function BrandsPage() {
   ];
 
   // Handler functions
-  const handleCreateBrand = async () => {
-    if (!newBrandName.trim()) {
-      toast.error('Please enter a brand name');
-      return;
-    }
+  // const handleCreateBrand = async () => {
+  //   if (!newBrandName.trim()) {
+  //     toast.error('Please enter a brand name');
+  //     return;
+  //   }
 
-    try {
-      await createBrand({
-        name: newBrandName,
-        tagline: newBrandTagline,
-      });
+  //   try {
+  //     await createBrand({
+  //       name: newBrandName,
+  //     });
       
-      toast.success('Brand created successfully!');
-      setNewBrandName('');
-      setNewBrandTagline('');
-      setIsCreateDialogOpen(false);
-    } catch (error) {
-      toast.error('Failed to create brand');
-      console.error(error);
-    }
-  };
+  //     toast.success('Brand created successfully!');
+  //     setNewBrandName('');
+  //     setNewBrandTagline('');
+  //     setIsCreateDialogOpen(false);
+  //   } catch (error) {
+  //     toast.error('Failed to create brand');
+  //     console.error(error);
+  //   }
+  // };
 
   const handleEditBrand = (brand: any) => {
     setSelectedBrand(brand);
@@ -169,7 +168,6 @@ export default function BrandsPage() {
       await updateBrand({
         brandId: selectedBrand._id as Id<"brands">,
         name: editBrandName,
-        tagline: editBrandTagline,
       });
       
       toast.success('Brand updated successfully!');
@@ -240,13 +238,13 @@ export default function BrandsPage() {
                   className="w-full px-4 py-2 bg-input text-foreground rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
-              <Button 
+              {/* <Button 
                 onClick={handleCreateBrand}
                 className="w-full"
                 disabled={!newBrandName.trim()}
               >
                 Create Brand
-              </Button>
+              </Button> */}
             </div>
           </DialogContent>
         </Dialog>

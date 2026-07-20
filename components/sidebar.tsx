@@ -18,7 +18,15 @@ import {
   ShoppingCart,
   BookOpen,
   LayoutTemplate,
-  ListIcon
+  ListIcon,
+  CreditCard,
+  DollarSign,
+  Package,
+  FileText,
+  History,
+  Clock,
+  Webhook,
+  TrendingUp
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
@@ -41,6 +49,7 @@ const navItems = [
   { icon: Activity, label: 'Platform Analytics', href: '/analytics' },
   { icon: BookOpen, label: 'Audit Logs', href: '/audit' },
   { icon: Users, label: 'Team Members', href: '/teams' },
+  { icon: CreditCard, label: 'Billing', href: '/billing' },
   { icon: Settings, label: 'Settings', href: '/settings' },
 ];
 

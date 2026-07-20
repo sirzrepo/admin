@@ -1,12 +1,11 @@
 // export default {
 //   providers: [
 //     {
-//       domain: process.env.CONVEX_CLERK_URL,
+//       domain: process.env.CONVEX_SITE_URL,
 //       applicationID: "convex",
 //     },
 //   ],
 // };
-
 
 export default {
   providers: [
@@ -15,7 +14,7 @@ export default {
       applicationID: "convex",
     },
     {
-      domain: process.env.SITE_URL,
+      domain: process.env.CONVEX_SITE_URL,
       applicationID: "convex",
     },
   ],

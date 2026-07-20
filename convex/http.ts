@@ -3,10 +3,87 @@ import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { auth } from "./auth";
+import { classifyError } from "./lib/errorKind";
 
 const http = httpRouter();
 
 auth.addHttpRoutes(http);
+
+// --- Stripe Billing Webhook ---
+
+http.route({
+  path: "/stripe/webhook",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const body = await request.text();
+    const signature = request.headers.get("stripe-signature");
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!signature || !webhookSecret) {
+      return new Response("Missing Stripe webhook configuration", { status: 400 });
+    }
+
+    const verified = await verifyStripeWebhookSignature(body, signature, webhookSecret);
+    if (!verified) {
+      return new Response("Invalid Stripe signature", { status: 401 });
+    }
+
+    let event: any;
+    try {
+      event = JSON.parse(body);
+    } catch {
+      return new Response("Invalid JSON", { status: 400 });
+    }
+
+    try {
+      await ctx.runMutation(internal.billing.processStripeEventInternal, { event });
+      return new Response(JSON.stringify({ received: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error) {
+      console.error("[stripe-webhook] processing failed:", error);
+      return new Response("Webhook processing failed", { status: 500 });
+    }
+  }),
+});
+
+async function verifyStripeWebhookSignature(body: string, signatureHeader: string, secret: string) {
+  const parts = signatureHeader.split(",").reduce<Record<string, string[]>>((acc, part) => {
+    const [key, value] = part.split("=");
+    if (!key || !value) return acc;
+    acc[key] = [...(acc[key] ?? []), value];
+    return acc;
+  }, {});
+  const timestamp = parts.t?.[0];
+  const signatures = parts.v1 ?? [];
+  if (!timestamp || signatures.length === 0) return false;
+
+  const timestampMs = Number(timestamp) * 1000;
+  if (!Number.isFinite(timestampMs) || Math.abs(Date.now() - timestampMs) > 5 * 60 * 1000) {
+    return false;
+  }
+
+  const encoder = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const digest = await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(`${timestamp}.${body}`));
+  const expected = Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return signatures.some((candidate) => constantTimeEqual(candidate, expected));
+}
+
+function constantTimeEqual(a: string, b: string) {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
 
 // --- Shopify OAuth Flow ---
 
@@ -16,11 +93,31 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     const url = new URL(request.url);
     const shop = url.searchParams.get("shop");
-    const userId = url.searchParams.get("userId"); // Passed from the frontend button
+    const nonce = url.searchParams.get("nonce");
+    const appUrl = process.env.SITE_URL || "http://localhost:5173";
 
-    if (!shop || !userId) {
-      return new Response("Missing shop or userId parameter", { status: 400 });
+    if (!shop || !nonce) {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `${appUrl}/?shopify_error=missing_params` },
+      });
     }
+
+    // Trade the nonce for the caller's userId. The nonce can only have been
+    // minted by an authenticated mutation, so whoever holds it proves they
+    // were signed in when the flow started. Anyone without a valid nonce is
+    // bounced here - the browser can no longer pick its own userId.
+    const consumed = await ctx.runMutation(internal.oauthNonces.consumeNonce, {
+      nonce,
+      provider: "shopify",
+    });
+    if (!consumed) {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `${appUrl}/?shopify_error=invalid_nonce` },
+      });
+    }
+    const userId = consumed.userId;
 
     const clientId = process.env.SHOPIFY_CLIENT_ID;
     if (!clientId) {
@@ -29,10 +126,10 @@ http.route({
 
     // Construct the Shopify OAuth authorization URL
     const redirectUri = `${process.env.CONVEX_SITE_URL}/shopify/callback`;
-    const scopes = "read_products,read_orders,read_content,read_customers,unauthenticated_read_content,unauthenticated_read_product_listings";
-    
-    // We pass the userId in the `state` parameter so we can retrieve it in the callback
-    const state = userId; 
+    const scopes = "read_products,unauthenticated_read_product_listings";
+
+    // userId is now trusted (came from the consumed nonce); passing as state
+    const state = userId;
 
     const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${clientId}&scope=${scopes}&redirect_uri=${redirectUri}&state=${state}`;
 
@@ -50,12 +147,25 @@ http.route({
   method: "GET",
   handler: httpAction(async (ctx, request) => {
     const url = new URL(request.url);
+    const appUrl = process.env.SITE_URL || "http://localhost:5173";
     const shop = url.searchParams.get("shop");
     const code = url.searchParams.get("code");
     const userId = url.searchParams.get("state"); // Extracted from the state param
 
+    // Handle OAuth denial - redirect back to app with error instead of showing 400
+    const oauthError = url.searchParams.get("error");
+    if (oauthError) {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `${appUrl}/settings?section=integrations&shopify_error=${encodeURIComponent(oauthError)}` },
+      });
+    }
+
     if (!shop || !code || !userId) {
-      return new Response("Missing required OAuth parameters", { status: 400 });
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `${appUrl}/settings?section=integrations&shopify_error=missing_params` },
+      });
     }
 
     const clientId = process.env.SHOPIFY_CLIENT_ID;
@@ -106,6 +216,9 @@ http.route({
           client_id: clientId,
           client_secret: clientSecret,
           code,
+          // Expiring offline tokens are mandatory for public apps registered
+          // after April 1, 2026. Non-expiring tokens are rejected by the Admin API.
+          expiring: "1",
         }),
       });
 
@@ -114,7 +227,18 @@ http.route({
       }
 
       const tokenData = await tokenResponse.json();
-      const accessToken = tokenData.access_token;
+      const accessToken: string | undefined = tokenData.access_token;
+      const refreshToken: string | undefined = tokenData.refresh_token;
+      const expiresIn: number | undefined = tokenData.expires_in;
+      const accessTokenExpiresAt = expiresIn ? Date.now() + expiresIn * 1000 : undefined;
+
+      if (!accessToken) {
+        console.error("[Shopify] Token exchange returned no access_token:", tokenData);
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `${appUrl}/settings?section=integrations&shopify_error=token_exchange_failed` },
+        });
+      }
 
       // 2. Fetch store info from Shopify using the new token
       const shopResponse = await fetch(`https://${shop}/admin/api/2024-04/graphql.json`, {
@@ -145,8 +269,12 @@ http.route({
       });
 
       const shopData = await shopResponse.json();
-      console.log("[1/4 Admin API Response]:", JSON.stringify(shopData));
       const shopInfo = shopData?.data?.shop;
+
+      if (!shopInfo) {
+        console.error("[Shopify] Failed to fetch shop info:", shopData?.errors || "No shop data");
+        // Continue with fallback data - don't fail the entire OAuth
+      }
 
       // 2.5 Fetch Storefront Access Token & Brand Assets
       let brandAssets: any = null;
@@ -167,7 +295,6 @@ http.route({
           }),
         });
         const sfTokenData = await sfTokenResponse.json();
-        console.log("[2/4 Storefront Token Creation]:", JSON.stringify(sfTokenData));
         sfToken = sfTokenData?.data?.storefrontAccessTokenCreate?.storefrontAccessToken?.accessToken;
 
         if (sfToken) {
@@ -194,7 +321,6 @@ http.route({
             }),
           });
           const sfData = await storefrontResponse.json();
-          console.log("[3/4 Storefront Brand Query]:", JSON.stringify(sfData));
           brandAssets = sfData?.data?.shop?.brand;
         }
       } catch (e) {
@@ -218,7 +344,7 @@ http.route({
         storefrontAccessToken: sfToken,
       };
 
-      console.log("[4/4 Final storeData]:", JSON.stringify(storeData));
+      console.log(`[Shopify] Store connected: ${shop} (${shopInfo?.name || 'Unknown'})`);
 
       // 3. Save the integration to our database securely
       // Using Promise to capture the returned integration ID if needed, 
@@ -228,6 +354,8 @@ http.route({
       await ctx.runMutation(internal.integrations.saveShopifyIntegration, {
         userId: userId as any,
         accessToken,
+        refreshToken,
+        accessTokenExpiresAt,
         domain: shop,
         storeData,
       });
@@ -270,7 +398,7 @@ http.route({
 
         if (brand) {
           console.log(`[OAuth] Found active brand: ${brand._id} (${brand.name}). Scheduling background sync...`);
-          // Schedule as a background job — runs immediately but doesn't block the redirect
+          // Schedule as a background job - runs immediately but doesn't block the redirect
           await ctx.scheduler.runAfter(0, api.products.syncProducts, {
             integrationId: integration._id,
             brandId: brand._id,
@@ -278,25 +406,25 @@ http.route({
             domain: shop,
           });
         } else {
-          console.warn(`[OAuth] No active brand found for userId ${userId} — skipping initial product sync`);
+          console.warn(`[OAuth] No active brand found for userId ${userId} - skipping initial product sync`);
         }
       }
 
-      // 5. Redirect the user back to the frontend app, closing the OAuth window flow
-      // Normally you might use postMessage to a parent window if this opened in a popup, 
-      // or redirect back to the app URL with a success parameter.
-      const appUrl = process.env.SITE_URL || "http://localhost:5173";
-      
+      // 5. Redirect the user back to the frontend app
       return new Response(null, {
         status: 302,
         headers: {
-          Location: `${appUrl}/?shopify_connected=true`,
+          Location: `${appUrl}/settings?section=integrations&shopify_connected=true`,
         },
       });
 
     } catch (error) {
       console.error("Shopify OAuth Error:", error);
-      return new Response("OAuth flow failed", { status: 500 });
+      const appUrl = process.env.SITE_URL || "http://localhost:5173";
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `${appUrl}/settings?section=integrations&shopify_error=oauth_failed` },
+      });
     }
   }),
 });
@@ -342,10 +470,39 @@ http.route({
 
     try {
       const payload = JSON.parse(rawBody);
-      
+
+      // ─── GDPR / mandatory compliance webhooks ─────────────────────────────
+      // Shopify requires every public app to respond 200 to these three topics.
+      // SIRz only stores Shopify product catalog + integration metadata - no
+      // customer or order data - so the customer-data webhooks just acknowledge.
+      // shops/redact triggers a full purge of the shop's Shopify-sourced data.
+      if (topic === "customers/data_request") {
+        console.log(`[compliance] customers/data_request for shop=${shop}, customer=${payload?.customer?.id} - no customer data stored, acknowledging.`);
+        return new Response("OK", { status: 200 });
+      }
+
+      if (topic === "customers/redact") {
+        console.log(`[compliance] customers/redact for shop=${shop}, customer=${payload?.customer?.id} - no customer data stored, acknowledging.`);
+        return new Response("OK", { status: 200 });
+      }
+
+      // Both "shop/redact" (singular, used in shopify.app.toml compliance_topics)
+      // and "shops/redact" (plural, seen on some legacy webhook headers) refer
+      // to the same event. Accept both to stay forward/backward compatible.
+      if (topic === "shop/redact" || topic === "shops/redact") {
+        const shopDomain = payload?.shop_domain || shop;
+        console.log(`[compliance] ${topic} for shop=${shopDomain} - purging Shopify-sourced data.`);
+        const result = await ctx.runMutation(internal.integrations.purgeShopifyDataForShop, {
+          domain: shopDomain,
+        });
+        console.log(`[compliance] ${topic} result:`, result);
+        return new Response("OK", { status: 200 });
+      }
+
+      // ─── Standard webhooks (product sync) ──────────────────────────────────
       // Need to find the associated integration and brand
       const integration = await ctx.runQuery(internal.integrations.getIntegrationByDomain, { domain: shop });
-      
+
       if (!integration) {
         console.warn(`Received webhook for unknown shop: ${shop}`);
         return new Response("Shop not found", { status: 200 }); // Return 200 so Shopify stops retrying
@@ -397,7 +554,7 @@ http.route({
 
     const { brandId, folder, assetName, contentType } = await request.json() as {
       brandId: string;
-      folder: "identity" | "videos" | "campaigns" | "posts" | "blog" | "email";
+      folder: "identity" | "videos" | "campaigns" | "posts" | "blog" | "email" | "references" | "products";
       assetName: string;
       contentType: string;
     };
@@ -424,14 +581,14 @@ http.route({
       region: "auto",
       endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
       credentials: { accessKeyId, secretAccessKey },
-      // Disable automatic CRC32 checksum injection — AWS SDK v3 adds
+      // Disable automatic CRC32 checksum injection - AWS SDK v3 adds
       // x-amz-checksum-crc32 to presigned URLs by default which R2's
       // CORS policy rejects during the browser preflight.
       requestChecksumCalculation: "WHEN_REQUIRED",
     });
 
     // Structured key: brands/{brandId}/{folder}/{assetName}
-    // Fixed key per asset type — R2 natively overwrites on re-upload, no cleanup needed
+    // Fixed key per asset type - R2 natively overwrites on re-upload, no cleanup needed
     const key = `brands/${brandId}/${folder}/${assetName}`;
 
     const command = new PutObjectCommand({
@@ -475,6 +632,9 @@ http.route({
   path: "/api/fal-webhook",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
+    const requestUrl = new URL(request.url);
+    const taskIdFromQuery = requestUrl.searchParams.get("taskId") as Id<"agentTasks"> | null;
+
     let body: any;
     try {
       body = await request.json();
@@ -522,7 +682,45 @@ http.route({
         output = {
           imageUrl,
           prompt: task.input?.builtPrompt || "",
-          model: "fal-ai/flux-pro/v1.1",
+          model: "fal-ai/gpt-image-1.5",
+          generatedAt: Date.now(),
+        };
+      } else if (task.agentType === "image_generator") {
+        const imageUrl = payload?.images?.[0]?.url;
+        if (!imageUrl) {
+          await ctx.runMutation(internal.agentTasks.failTask, {
+            taskId: task._id,
+            error: "fal.ai returned OK but no image URL was found in the image_generator payload.",
+          });
+          return new Response("OK", { status: 200 });
+        }
+        output = {
+          imageUrl,
+          prompt: task.input?.builtPrompt || "",
+          model: task.input?.resolvedModel || "fal-ai/gpt-image-1.5",
+          generatedAt: Date.now(),
+        };
+      } else if (task.agentType === "video_generator") {
+        const videoUrl = payload?.video?.url;
+        if (!videoUrl) {
+          await ctx.runMutation(internal.agentTasks.failTask, {
+            taskId: task._id,
+            error: "fal.ai returned OK but no video URL was found in the video_generator payload.",
+          });
+          return new Response("OK", { status: 200 });
+        }
+        const thumbnailUrl =
+          payload?.video?.thumbnail_url ||
+          payload?.video?.thumbnailUrl ||
+          payload?.thumbnail?.url ||
+          payload?.thumbnailUrl ||
+          task.input?.resolvedStartImageUrl ||
+          undefined;
+        output = {
+          videoUrl,
+          thumbnailUrl,
+          prompt: task.input?.builtPrompt || "",
+          model: task.input?.resolvedModel || "fal-ai/kling-video/v3/standard/text-to-video",
           generatedAt: Date.now(),
         };
       } else {
@@ -535,20 +733,77 @@ http.route({
         output,
       });
 
+      // Persist a custom ambassador row for character_designer outputs server-side.
+      // Doing this here (rather than in the client effect) means it works even
+      // when the user navigates away from Settings while the task is running.
+      if (task.agentType === "character_designer" && task.brandId && output?.imageUrl) {
+        try {
+          await ctx.runMutation(internal.ambassadors.upsertCustomAmbassadorForTask, {
+            brandId: task.brandId,
+            generationTaskId: task._id,
+            imageUrl: output.imageUrl,
+          });
+        } catch (ambassadorError) {
+          console.error(`[fal-webhook] Failed to upsert ambassador for task ${task._id}:`, ambassadorError);
+        }
+      }
+
       console.log(`[fal-webhook] Task ${task._id} completed successfully.`);
+
+      // Push notification if threadId exists
+      if (task.threadId) {
+        try {
+          await ctx.runAction(api.agent.pushTaskNotification, {
+            userId: task.userId,
+            brandId: task.brandId,
+            taskId: task._id,
+            taskLabel: task.label,
+            output,
+          });
+        } catch (notifyError) {
+          console.error(`[fal-webhook] Failed to send notification:`, notifyError);
+        }
+      }
     } else {
       // ERROR or any other non-OK status
-      const errorMessage =
+      let errorMessage =
         body?.payload?.detail ||
         body?.error ||
         `fal.ai reported status: ${status}`;
 
+      if (typeof errorMessage !== "string") {
+        try {
+          errorMessage = JSON.stringify(errorMessage);
+        } catch (e) {
+          errorMessage = "Unknown error object";
+        }
+      }
+
+      const httpStatus = typeof body?.status_code === "number" ? body.status_code : undefined;
+      const kind = classifyError({ status: httpStatus, message: errorMessage });
       await ctx.runMutation(internal.agentTasks.failTask, {
         taskId: task._id,
         error: errorMessage,
+        errorKind: kind,
       });
 
-      console.error(`[fal-webhook] Task ${task._id} failed: ${errorMessage}`);
+      console.error(`[fal-webhook] Task ${task._id} failed (${kind}): ${errorMessage}`);
+
+      // Push notification to Copilot thread if threadId exists
+      if (task.threadId) {
+        try {
+          await ctx.runAction(api.agent.pushTaskNotification, {
+            userId: task.userId,
+            brandId: task.brandId,
+            taskId: task._id,
+            taskLabel: task.label,
+            output: null,
+            error: errorMessage,
+          });
+        } catch (notifyError) {
+          console.error(`[fal-webhook] Failed to send failure notification:`, notifyError);
+        }
+      }
     }
 
     return new Response("OK", { status: 200 });
@@ -571,3 +826,207 @@ http.route({
 });
 
 export default http;
+
+// --- TikTok OAuth Flow ---
+
+http.route({
+  path: "/tiktok/auth",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const nonce = url.searchParams.get("nonce");
+    const appUrl = process.env.SITE_URL || "http://localhost:5173";
+
+    if (!nonce) {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `${appUrl}/?tiktok_error=missing_params` },
+      });
+    }
+
+    // Consume the nonce to recover the brandId. The nonce mutation already
+    // verified the caller owned this brand, so we don't have to trust the URL.
+    const consumed = await ctx.runMutation(internal.oauthNonces.consumeNonce, {
+      nonce,
+      provider: "tiktok",
+    });
+    if (!consumed || !consumed.brandId) {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `${appUrl}/?tiktok_error=invalid_nonce` },
+      });
+    }
+    const brandId = consumed.brandId;
+
+    const clientKey = process.env.TIKTOK_CLIENT_KEY;
+    if (!clientKey) {
+      return new Response("Missing TIKTOK_CLIENT_KEY", { status: 500 });
+    }
+
+    const redirectUri = `${process.env.CONVEX_SITE_URL}/tiktok/callback`;
+    // Scopes:
+    //   user.info.basic - Login Kit; identifies the connected creator
+    //   video.publish   - Direct Post (publish AI-generated ads)
+    //   video.list      - analytics (read like/comment/share/view counts on
+    //                     posts SIRz published for this merchant)
+    const scope = "user.info.basic,video.publish,video.list";
+    const returnTo = url.searchParams.get("returnTo") || "";
+    // Encode returnTo into state so the callback can redirect back to the right page.
+    // Format: brandId:::returnTo (both URL-safe segments).
+    const state = returnTo ? `${brandId}:::${encodeURIComponent(returnTo)}` : brandId;
+
+    const authUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${clientKey}&response_type=code&scope=${encodeURIComponent(scope)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;
+
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: authUrl,
+      },
+    });
+  }),
+});
+
+http.route({
+  path: "/tiktok/callback",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const appUrl = process.env.SITE_URL || "http://localhost:5173";
+    const url = new URL(request.url);
+    const code = url.searchParams.get("code");
+    const rawState = url.searchParams.get("state") || "";
+    const error = url.searchParams.get("error");
+
+    // Parse state: may be plain brandId or "brandId:::encodedReturnTo"
+    const stateParts = rawState.split(":::");
+    const brandId = stateParts[0] || null;
+    const returnTo = stateParts[1] ? decodeURIComponent(stateParts[1]) : null;
+    // Only allow relative paths to prevent open redirect attacks.
+    const safeReturnTo = returnTo && returnTo.startsWith("/") ? returnTo : null;
+    const successUrl = safeReturnTo
+      ? `${appUrl}${safeReturnTo}${safeReturnTo.includes("?") ? "&" : "?"}tiktok_connected=true`
+      : `${appUrl}/?tiktok_connected=true`;
+    const errorBase = safeReturnTo
+      ? `${appUrl}${safeReturnTo}${safeReturnTo.includes("?") ? "&" : "?"}`
+      : `${appUrl}/?`;
+
+    if (error) {
+      console.error("[TikTok OAuth] Error from TikTok:", error, url.searchParams.get("error_description"));
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: `${errorBase}tiktok_error=${encodeURIComponent(error)}`,
+        },
+      });
+    }
+
+    if (!code || !brandId) {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `${errorBase}tiktok_error=missing_params` },
+      });
+    }
+
+    const clientKey = process.env.TIKTOK_CLIENT_KEY;
+    const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
+
+    if (!clientKey || !clientSecret) {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `${appUrl}/?tiktok_error=server_config` },
+      });
+    }
+
+    try {
+      // Exchange authorization code for access token
+      const tokenResponse = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          client_key: clientKey,
+          client_secret: clientSecret,
+          code: code,
+          grant_type: "authorization_code",
+          redirect_uri: `${process.env.CONVEX_SITE_URL}/tiktok/callback`,
+        }),
+      });
+
+      if (!tokenResponse.ok) {
+        const errorText = await tokenResponse.text();
+        console.error("[TikTok OAuth] Token exchange failed:", errorText);
+        throw new Error(`Token exchange failed: ${errorText}`);
+      }
+
+      const tokenData = await tokenResponse.json();
+
+      const accessToken = tokenData.access_token;
+      const refreshToken = tokenData.refresh_token;
+      const expiresIn = tokenData.expires_in; // seconds
+      const openId = tokenData.open_id;
+      // Granted scopes from TikTok's response. May differ from what we
+      // requested if the merchant declined a scope at the consent screen.
+      // Stored on the connection so the frontend can detect when a
+      // re-authorization is required after we add new scopes.
+      const grantedScopes: string | undefined = tokenData.scope;
+
+      if (!accessToken || !openId) {
+        throw new Error("Missing access_token or open_id in response");
+      }
+
+      // Fetch user info to get account name
+      const userResponse = await fetch("https://open.tiktokapis.com/v2/user/info/?fields=display_name,avatar_url", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      let accountName = "TikTok Account";
+      let accountAvatarUrl: string | undefined;
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        accountName = userData.data?.user?.display_name || "TikTok Account";
+        accountAvatarUrl = userData.data?.user?.avatar_url || undefined;
+      }
+
+      // Save the connection (brandId is passed as state from the auth initiation)
+      const connectionId = await ctx.runMutation(internal.platformConnections.saveConnection, {
+        brandId: brandId as any,
+        platform: "tiktok",
+        accessToken,
+        refreshToken,
+        accountId: openId,
+        accountName,
+        accountAvatarUrl,
+        expiresAt: Date.now() + (expiresIn * 1000),
+        grantedScopes,
+      });
+
+      console.log(`[TikTok OAuth] Connected TikTok account for brand ${brandId}: ${accountName}`);
+
+      // TikTok avatar URLs are short-lived signed CDN links (they 403 after
+      // the signature expires). Copy to R2 in the background so we serve a
+      // permanent URL. Callback returns fast; the avatar swaps in moments later.
+      if (accountAvatarUrl && connectionId) {
+        await ctx.scheduler.runAfter(0, internal.platformConnections.syncTiktokAvatarToR2, {
+          connectionId,
+          sourceUrl: accountAvatarUrl,
+          brandId: brandId as any,
+          accountId: openId,
+        });
+      }
+
+      return new Response(null, {
+        status: 302,
+        headers: { Location: successUrl },
+      });
+
+    } catch (error) {
+      console.error("[TikTok OAuth Error]:", error);
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `${errorBase}tiktok_error=oauth_failed` },
+      });
+    }
+  }),
+});

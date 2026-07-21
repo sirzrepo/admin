@@ -20,13 +20,6 @@ import {
   LayoutTemplate,
   ListIcon,
   CreditCard,
-  DollarSign,
-  Package,
-  FileText,
-  History,
-  Clock,
-  Webhook,
-  TrendingUp
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
@@ -34,6 +27,7 @@ import Image from 'next/image';
 const navItems = [
   { icon: BarChart3, label: 'Overview', href: '/' },
   { icon: LayoutTemplate, label: 'Agent Tasks', href: '/agent-tasks' },
+  { icon: CreditCard, label: 'Billing', href: '/billing' },
   { icon: Briefcase, label: 'Brands', href: '/brands' },
   { icon: Users, label: 'Ambassadors', href: '/ambassadors' },
   { icon: ListIcon, label: 'Products', href: '/products' },
@@ -49,7 +43,6 @@ const navItems = [
   { icon: Activity, label: 'Platform Analytics', href: '/analytics' },
   { icon: BookOpen, label: 'Audit Logs', href: '/audit' },
   { icon: Users, label: 'Team Members', href: '/teams' },
-  { icon: CreditCard, label: 'Billing', href: '/billing' },
   { icon: Settings, label: 'Settings', href: '/settings' },
 ];
 
@@ -111,7 +104,7 @@ export function Sidebar() {
               className={cn(
                 'flex items-center gap-3 px-3 py-2 rounded-lg transition-colors group',
                 isActive
-                  ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+                  ? 'bg-teal-600 text-sidebar-primary-foreground'
                   : 'text-sidebar-foreground hover:bg-sidebar-accent'
               )}
               title={collapsed ? item.label : ''}

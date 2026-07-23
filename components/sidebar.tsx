@@ -27,7 +27,7 @@ import Image from 'next/image';
 const navItems = [
   { icon: BarChart3, label: 'Overview', href: '/' },
   { icon: LayoutTemplate, label: 'Agent Tasks', href: '/agent-tasks' },
-  { icon: CreditCard, label: 'Billing', href: '/billing' },
+  // { icon: CreditCard, label: 'Billing', href: '/billing' },
   { icon: Briefcase, label: 'Brands', href: '/brands' },
   { icon: Users, label: 'Ambassadors', href: '/ambassadors' },
   { icon: ListIcon, label: 'Products', href: '/products' },

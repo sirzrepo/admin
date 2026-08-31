@@ -20,6 +20,7 @@ import {
   LayoutTemplate,
   ListIcon,
   CreditCard,
+  Clapperboard,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
@@ -37,6 +38,7 @@ const navItems = [
   { icon: LayoutTemplate, label: 'Integrations', href: '/integrations' },
   { icon: LayoutTemplate, label: 'Platform Connections', href: '/platform-connections' },
   { icon: LayoutTemplate, label: 'Scheduled Posts', href: '/scheduled-posts' },
+  { icon: Clapperboard, label: 'Website Showcase', href: '/showcase' },
   { icon: Zap, label: 'AI Generation', href: '/generation' },
   { icon: LineChart, label: 'Provider Analytics', href: '/providers' },
   { icon: ShoppingCart, label: 'Shopify Monitor', href: '/shopify' },

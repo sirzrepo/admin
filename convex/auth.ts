@@ -60,18 +60,15 @@ const AdminEmailProvider = Email({
   maxAge: 10 * 60,
   generateVerificationToken: generateOTP,
   async authorize(params: any, account: any) {
+    // The invite gate lives in the `afterUserCreatedOrUpdated` callback (it needs
+    // database access to check workspace invitations). Here we only bind the code
+    // to the address that requested it.
     const email = params.email;
-    if (!isInternalAdminEmail(email)) {
-      throw new Error("This email is not allowed to access internal admin.");
-    }
     if (typeof email !== "string" || account.providerAccountId !== email.trim().toLowerCase()) {
       throw new Error("Invalid admin verification code.");
     }
   },
   async sendVerificationRequest({ identifier: to, token, provider }: any) {
-    if (!isInternalAdminEmail(to)) {
-      throw new Error("This email is not allowed to access internal admin.");
-    }
     await sendResendEmail(to, provider.apiKey!, provider.from!, verificationEmail({ code: token, email: to }));
   },
   apiKey: process.env.AUTH_RESEND_KEY,
@@ -142,4 +139,94 @@ if (GOOGLE_OAUTH_ENABLED) {
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers,
+  callbacks: {
+    // Website workspace invite gate. Only the "admin-email" provider (used by
+    // sirz.ai/admin) enforces workspace membership; all other providers
+    // (password, google, clerk) are unaffected.
+    async afterUserCreatedOrUpdated(ctx, args) {
+      if (args.provider.id !== "admin-email") return;
+
+      const db = ctx.db as any;
+      const email =
+        typeof args.profile.email === "string"
+          ? args.profile.email.trim().toLowerCase()
+          : "";
+      if (!email) {
+        throw new Error("A work email is required to access this workspace");
+      }
+
+      const now = Date.now();
+      const isOwner = isInternalAdminEmail(email);
+      const existing = await db
+        .query("workspaceMembers")
+        .withIndex("by_email", (q: any) => q.eq("email", email))
+        .unique();
+      const invitation = (await db
+        .query("workspaceInvitations")
+        .withIndex("by_email", (q: any) => q.eq("email", email))
+        .collect())
+        .find((item: any) => !item.acceptedAt && !item.revokedAt && item.expiresAt > now);
+
+      if (!isOwner && existing?.status !== "active" && !invitation) {
+        throw new Error("This email has not been invited to the SIRz website workspace");
+      }
+      if (existing?.status === "suspended" && !invitation && !isOwner) {
+        throw new Error("Your website workspace access has been suspended");
+      }
+
+      // A code request only proves the address was typed. Activate the owner or
+      // an invitation only after that address has verified its code.
+      if (args.type !== "verification") return;
+
+      if (invitation) {
+        if (existing) {
+          await db.patch(existing._id, {
+            userId: args.userId,
+            name: invitation.name || existing.name,
+            role: invitation.role,
+            status: "active",
+            invitedBy: invitation.invitedBy,
+            invitedAt: invitation._creationTime,
+            joinedAt: now,
+            suspendedAt: undefined,
+          });
+        } else {
+          await db.insert("workspaceMembers", {
+            userId: args.userId,
+            email,
+            name: invitation.name || email,
+            role: invitation.role,
+            status: "active",
+            invitedBy: invitation.invitedBy,
+            invitedAt: invitation._creationTime,
+            joinedAt: now,
+          });
+        }
+        await db.patch(invitation._id, { acceptedAt: now });
+        return;
+      }
+
+      if (isOwner || existing?.status === "active") {
+        if (existing) {
+          await db.patch(existing._id, {
+            userId: args.userId,
+            role: isOwner ? "owner" : existing.role,
+            status: "active",
+            joinedAt: existing.joinedAt ?? now,
+            suspendedAt: undefined,
+          });
+        } else {
+          await db.insert("workspaceMembers", {
+            userId: args.userId,
+            email,
+            name: args.profile.name || email,
+            role: "owner",
+            status: "active",
+            invitedAt: now,
+            joinedAt: now,
+          });
+        }
+      }
+    },
+  },
 });

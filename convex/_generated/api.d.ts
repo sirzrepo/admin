@@ -49,6 +49,8 @@ import type * as scheduling from "../scheduling.js";
 import type * as services_email from "../services/email.js";
 import type * as services_sendEmail from "../services/sendEmail.js";
 import type * as services_tiktok from "../services/tiktok.js";
+import type * as showcase from "../showcase.js";
+import type * as showcaseCategories from "../showcaseCategories.js";
 import type * as specializedAgents_brandGuideAnalyzer from "../specializedAgents/brandGuideAnalyzer.js";
 import type * as specializedAgents_characterDesigner from "../specializedAgents/characterDesigner.js";
 import type * as specializedAgents_imageGenerator from "../specializedAgents/imageGenerator.js";
@@ -58,6 +60,7 @@ import type * as specializedAgents_videoGenerator from "../specializedAgents/vid
 import type * as teams from "../teams.js";
 import type * as tonePresets from "../tonePresets.js";
 import type * as users from "../users.js";
+import type * as workspace from "../workspace.js";
 
 import type {
   ApiFromModules,
@@ -107,6 +110,8 @@ declare const fullApi: ApiFromModules<{
   "services/email": typeof services_email;
   "services/sendEmail": typeof services_sendEmail;
   "services/tiktok": typeof services_tiktok;
+  showcase: typeof showcase;
+  showcaseCategories: typeof showcaseCategories;
   "specializedAgents/brandGuideAnalyzer": typeof specializedAgents_brandGuideAnalyzer;
   "specializedAgents/characterDesigner": typeof specializedAgents_characterDesigner;
   "specializedAgents/imageGenerator": typeof specializedAgents_imageGenerator;
@@ -116,6 +121,7 @@ declare const fullApi: ApiFromModules<{
   teams: typeof teams;
   tonePresets: typeof tonePresets;
   users: typeof users;
+  workspace: typeof workspace;
 }>;
 
 /**

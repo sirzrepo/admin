@@ -116,6 +116,12 @@ export default defineSchema({
     // Timestamp guard - prevents concurrent generateBrandTemplates runs for the same brand.
     // Set at the start of generation, cleared at the end. A stale lock (>10 min) is ignored.
     templatesGenerationLockedAt: v.optional(v.number()),
+    logoWatermarkDefaults: v.optional(v.object({
+      enabled: v.optional(v.boolean()),
+      opacityPercent: v.optional(v.number()),
+      position: v.optional(v.string()),
+      sizePercent: v.optional(v.number()),
+    })),
   }).index("by_userId", ["userId"]),
 
   // AI Ambassadors - both preset and custom
@@ -329,6 +335,10 @@ export default defineSchema({
       shares: v.number(),
       lastSyncedAt: v.number(),
     })),
+    analyticsFailureCount: v.optional(v.number()),
+    analyticsTrackingEndsAt: v.optional(v.number()),
+    nextAnalyticsSyncAt: v.optional(v.number()),
+    analyticsDisabledReason: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_campaignId", ["campaignId"])
@@ -506,6 +516,7 @@ export default defineSchema({
     manualTrialActivationAt: v.optional(v.number()),
     convertedAt: v.optional(v.number()),
     cancelAtPeriodEnd: v.optional(v.boolean()),
+    subscriptionState: v.optional(v.string()),
     previousPlanKey: v.optional(v.string()),
     pendingPlanKey: v.optional(v.string()),
     pendingUpgradeCredits: v.optional(v.number()),
@@ -815,6 +826,70 @@ export default defineSchema({
     .index('by_role', ['roleId'])
     .index('by_permission', ['permissionId'])
     .index('by_permission_role', ['permissionId', 'roleId']),
+
+  // Website showcase items ("Made with SIRz" creative wall).
+  // Managed from the admin app, rendered publicly on the marketing site.
+  showcaseItems: defineTable({
+    title: v.string(),        // brand name, e.g. "ABC Gems"
+    tag: v.string(),          // free-form chip label, e.g. "AI UGC Video"
+    caption: v.string(),      // e.g. "Necklace review · creator-led"
+    imageUrl: v.optional(v.union(v.string(), v.null())), // public R2 URL (image, or poster when videoUrl is set)
+    videoUrl: v.optional(v.union(v.string(), v.null())), // public R2 URL when the creative is a video
+    categoryId: v.optional(v.union(v.id("showcaseCategories"), v.null())), // filter tab on the wall
+    sortOrder: v.number(),
+    isPublished: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_sortOrder", ["sortOrder"])
+    .index("by_category", ["categoryId"])
+    .index("by_published_sortOrder", ["isPublished", "sortOrder"]),
+
+  // Editable "Made with SIRz" wall categories. Managed from the admin app;
+  // rendered as filter tabs on the marketing site.
+  showcaseCategories: defineTable({
+    name: v.string(),      // display name, e.g. "AI UGC Video"
+    slug: v.string(),      // stable identifier, derived from the name at creation
+    sortOrder: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_sortOrder", ["sortOrder"])
+    .index("by_slug", ["slug"]),
+
+  // -------------------------------------- Website workspace ----------------------------------------------------------
+  // Members of the private website workspace (the "Made with SIRz" wall admins).
+  // Mirrors the investor workspace's teamMembers flow: invitation -> sign in ->
+  // activation. "owner" is the allowlisted internal admin; everyone else invited
+  // via /admin/members is an "admin".
+  workspaceMembers: defineTable({
+    userId: v.id("users"),
+    email: v.string(),
+    name: v.string(),
+    role: v.union(v.literal("owner"), v.literal("admin")),
+    status: v.union(v.literal("active"), v.literal("pending"), v.literal("suspended")),
+    invitedBy: v.optional(v.id("users")),
+    invitedAt: v.number(),
+    joinedAt: v.optional(v.number()),
+    suspendedAt: v.optional(v.number()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_email", ["email"]),
+
+  // Pending invitations to the website workspace. Acceptance is automatic once
+  // the invited address verifies its six-digit sign-in code (no token link needed).
+  workspaceInvitations: defineTable({
+    email: v.string(),
+    name: v.optional(v.string()),
+    role: v.union(v.literal("owner"), v.literal("admin")),
+    tokenHash: v.string(),
+    invitedBy: v.id("users"),
+    expiresAt: v.number(),
+    acceptedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_email", ["email"]),
 });
 
 
